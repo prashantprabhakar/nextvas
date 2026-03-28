@@ -1,0 +1,22 @@
+{
+  "name": "@nexvas-examples/design-tool",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@nexvas/core": "workspace:*",
+    "@nexvas/renderer": "workspace:*",
+    "@nexvas/plugin-selection": "workspace:*",
+    "@nexvas/plugin-drag": "workspace:*",
+    "@nexvas/plugin-history": "workspace:*",
+    "@nexvas/plugin-grid": "workspace:*",
+    "@nexvas/plugin-guides": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1"
+  }
+}

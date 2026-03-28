@@ -1,0 +1,40 @@
+{
+  "name": "@nexvas/core",
+  "version": "0.0.1",
+  "description": "Core scene graph, event system, and plugin registry for nexvas",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --declaration",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:visual": "vitest run --config vitest.browser.config.ts",
+    "test:visual:update": "vitest run --config vitest.browser.config.ts --update",
+    "typecheck": "tsc --noEmit",
+    "benchmark": "vitest bench --run"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.1",
+    "@vitest/browser": "^4.1.2",
+    "@vitest/browser-playwright": "^4.1.2",
+    "canvaskit-wasm": "^0.41.0",
+    "jsdom": "^29.0.1",
+    "playwright": "^1.50.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "vite-plugin-dts": "^4.0.0",
+    "vitest": "^4.1.2"
+  }
+}

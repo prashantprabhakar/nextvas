@@ -1,0 +1,205 @@
+import { describe, it, expect, vi } from 'vitest'
+import { Stage } from '../src/Stage.js'
+import { Rect } from '../src/objects/Rect.js'
+import { Circle } from '../src/objects/Circle.js'
+import { Group } from '../src/objects/Group.js'
+import { createMockCK, createMockHTMLCanvas } from './__mocks__/canvaskit.js'
+
+function makeStage() {
+  const ck = createMockCK()
+  const canvas = createMockHTMLCanvas()
+  return { stage: new Stage({ canvas, canvasKit: ck }), ck, canvas }
+}
+
+describe('Stage', () => {
+  it('constructs without error', () => {
+    expect(() => makeStage()).not.toThrow()
+  })
+
+  it('throws when surface creation fails', () => {
+    const ck = createMockCK()
+    ;(ck as unknown as { MakeWebGLCanvasSurface: () => null }).MakeWebGLCanvasSurface = () => null
+    const canvas = createMockHTMLCanvas()
+    expect(() => new Stage({ canvas, canvasKit: ck })).toThrow(/Failed to create CanvasKit/)
+  })
+
+  it('addLayer and removeLayer', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer()
+    expect(stage.layers).toHaveLength(1)
+    stage.removeLayer(layer)
+    expect(stage.layers).toHaveLength(0)
+  })
+
+  it('getObjectById finds across layers', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer()
+    const rect = new Rect({ x: 0, y: 0, width: 50, height: 50 })
+    layer.add(rect)
+    expect(stage.getObjectById(rect.id)).toBe(rect)
+  })
+
+  it('render calls surface.flush()', () => {
+    const { stage, ck } = makeStage()
+    const flushSpy = vi.spyOn(ck.surface, 'flush')
+    stage.render()
+    expect(flushSpy).toHaveBeenCalledOnce()
+  })
+
+  it('render skips when destroyed', () => {
+    const { stage, ck } = makeStage()
+    const flushSpy = vi.spyOn(ck.surface, 'flush')
+    stage.destroy()
+    stage.render()
+    expect(flushSpy).not.toHaveBeenCalled()
+  })
+
+  it('markDirty re-triggers render on next startLoop tick', () => {
+    const { stage } = makeStage()
+    stage.markDirty()
+    expect(stage['_dirty']).toBe(true)
+  })
+
+  it('plugin use() installs and uninstalls', () => {
+    const { stage } = makeStage()
+    const installed = vi.fn()
+    const uninstalled = vi.fn()
+    const plugin = {
+      name: 'test',
+      version: '1.0.0',
+      install: installed,
+      uninstall: uninstalled,
+    }
+    stage.use(plugin)
+    expect(installed).toHaveBeenCalledOnce()
+    stage.plugins.uninstall('test')
+    expect(uninstalled).toHaveBeenCalledOnce()
+  })
+
+  it('toJSON serializes layers', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer({ name: 'BG' })
+    layer.add(new Rect({ x: 1, y: 2, width: 3, height: 4 }))
+    const json = stage.toJSON()
+    expect(json.version).toBe('1.0.0')
+    expect(json.layers).toHaveLength(1)
+    expect(json.layers[0]!.name).toBe('BG')
+    expect(json.layers[0]!.objects).toHaveLength(1)
+  })
+
+  it('addRenderPass and removeRenderPass', () => {
+    const { stage } = makeStage()
+    const pass = { phase: 'pre' as const, order: 0, render: vi.fn() }
+    stage.addRenderPass(pass)
+    stage.render()
+    expect(pass.render).toHaveBeenCalledOnce()
+    stage.removeRenderPass(pass)
+    stage.render()
+    expect(pass.render).toHaveBeenCalledOnce() // still once
+  })
+
+  it('destroy cleans up surface', () => {
+    const { stage, ck } = makeStage()
+    const disposeSpy = vi.spyOn(ck.surface, 'dispose')
+    stage.destroy()
+    expect(disposeSpy).toHaveBeenCalledOnce()
+  })
+
+  it('loadJSON restores scene from toJSON snapshot', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer({ name: 'Main' })
+    layer.add(new Rect({ x: 10, y: 20, width: 100, height: 50, name: 'R1' }))
+    layer.add(new Circle({ x: 200, y: 200, width: 80, height: 80, name: 'C1' }))
+    const json = stage.toJSON()
+
+    // Load into a fresh stage
+    const { stage: stage2 } = makeStage()
+    stage2.loadJSON(json)
+
+    expect(stage2.layers).toHaveLength(1)
+    expect(stage2.layers[0]!.name).toBe('Main')
+    const objs = stage2.layers[0]!.objects
+    expect(objs).toHaveLength(2)
+    expect(objs[0]!.name).toBe('R1')
+    expect(objs[0]!.x).toBe(10)
+    expect(objs[1]!.name).toBe('C1')
+  })
+
+  it('loadJSON replaces existing layers', () => {
+    const { stage } = makeStage()
+    stage.addLayer({ name: 'Old' })
+    const { stage: stage2 } = makeStage()
+    const layer2 = stage2.addLayer({ name: 'New' })
+    layer2.add(new Rect({ x: 0, y: 0, width: 10, height: 10 }))
+    stage.loadJSON(stage2.toJSON())
+    expect(stage.layers).toHaveLength(1)
+    expect(stage.layers[0]!.name).toBe('New')
+  })
+
+  it('loadJSON throws on unsupported schema version', () => {
+    const { stage } = makeStage()
+    expect(() => stage.loadJSON({ version: '2.0.0', layers: [] })).toThrow(/unsupported schema version/)
+  })
+
+  it('loadJSON round-trips Group with children', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer()
+    const group = new Group({ x: 0, y: 0, width: 200, height: 200 })
+    group.add(new Rect({ x: 5, y: 5, width: 50, height: 50, name: 'child' }))
+    layer.add(group)
+    const json = stage.toJSON()
+
+    const { stage: stage2 } = makeStage()
+    stage2.loadJSON(json)
+    const restoredGroup = stage2.layers[0]!.objects[0]!
+    expect(restoredGroup.getType()).toBe('Group')
+    const children = (restoredGroup as Group).children
+    expect(children).toHaveLength(1)
+    expect(children[0]!.name).toBe('child')
+  })
+
+  it('getBoundingBox returns union of all visible objects', () => {
+    const { stage } = makeStage()
+    const layer = stage.addLayer()
+    layer.add(new Rect({ x: 0, y: 0, width: 100, height: 50 }))
+    layer.add(new Rect({ x: 50, y: 50, width: 100, height: 50 }))
+    const bb = stage.getBoundingBox()
+    expect(bb.width).toBe(150)
+    expect(bb.height).toBe(100)
+  })
+
+  describe('object:added / object:removed events', () => {
+    it('emits object:added when an object is added to a stage-owned layer', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const addedHandler = vi.fn()
+      stage.on('object:added', addedHandler)
+      const rect = new Rect({ x: 0, y: 0, width: 50, height: 50 })
+      layer.add(rect)
+      expect(addedHandler).toHaveBeenCalledOnce()
+      expect(addedHandler.mock.calls[0]![0].object).toBe(rect)
+    })
+
+    it('emits object:removed when an object is removed from a stage-owned layer', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect()
+      layer.add(rect)
+      const removedHandler = vi.fn()
+      stage.on('object:removed', removedHandler)
+      layer.remove(rect)
+      expect(removedHandler).toHaveBeenCalledOnce()
+      expect(removedHandler.mock.calls[0]![0].object).toBe(rect)
+    })
+
+    it('stops emitting events after the layer is removed from the stage', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const addedHandler = vi.fn()
+      stage.on('object:added', addedHandler)
+      stage.removeLayer(layer)
+      layer.add(new Rect())
+      expect(addedHandler).not.toHaveBeenCalled()
+    })
+  })
+})

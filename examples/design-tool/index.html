@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NexVas — Design Tool Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        background: #1a1a1a;
+        color: #e0e0e0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* ── Toolbar ─────────────────────────────────────────────── */
+      #toolbar {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 12px;
+        background: #2a2a2a;
+        border-bottom: 1px solid #3a3a3a;
+        flex-shrink: 0;
+      }
+      #toolbar h1 {
+        font-size: 13px;
+        font-weight: 600;
+        color: #888;
+        margin-right: 12px;
+        letter-spacing: 0.03em;
+      }
+      .tool-btn {
+        padding: 5px 10px;
+        border-radius: 5px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: #ccc;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .tool-btn:hover {
+        background: #3a3a3a;
+      }
+      .tool-btn.active {
+        background: #0066ff22;
+        border-color: #0066ff88;
+        color: #4d9fff;
+      }
+      .sep {
+        width: 1px;
+        height: 20px;
+        background: #3a3a3a;
+        margin: 0 4px;
+      }
+
+      /* ── Canvas area ─────────────────────────────────────────── */
+      #canvas-wrap {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #hint {
+        position: absolute;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 11px;
+        color: #555;
+        pointer-events: none;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <h1>nexvas</h1>
+      <button class="tool-btn active" id="btn-select" title="Select (V)">Select</button>
+      <button class="tool-btn" id="btn-rect" title="Rectangle (R)">Rect</button>
+      <button class="tool-btn" id="btn-circle" title="Circle (C)">Circle</button>
+      <button class="tool-btn" id="btn-text" title="Text (T)">Text</button>
+      <div class="sep"></div>
+      <button class="tool-btn" id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+      <button class="tool-btn" id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+      <div class="sep"></div>
+      <button class="tool-btn" id="btn-fit" title="Fit to content (F)">Fit</button>
+      <button class="tool-btn" id="btn-grid" title="Toggle grid (G)">Grid</button>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="hint">
+        Click to select · Drag to move · Delete to remove · Scroll to zoom · Space+drag to pan
+      </div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

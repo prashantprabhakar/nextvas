@@ -1,0 +1,21 @@
+{
+  "name": "@nexvas/benchmarks",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Performance regression benchmarks for nexvas",
+  "scripts": {
+    "benchmark": "vitest bench --run",
+    "benchmark:watch": "vitest bench",
+    "dev:browser": "vite browser",
+    "build:browser": "vite build browser --outDir browser-dist"
+  },
+  "dependencies": {
+    "@nexvas/core": "workspace:*",
+    "@nexvas/renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1",
+    "vitest": "^4.1.0"
+  }
+}

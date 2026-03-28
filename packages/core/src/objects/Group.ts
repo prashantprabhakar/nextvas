@@ -1,0 +1,188 @@
+import { BaseObject, type BaseObjectProps } from './BaseObject.js'
+import { BoundingBox } from '../math/BoundingBox.js'
+import { objectFromJSON } from './objectFromJSON.js'
+import type { RenderContext, ObjectJSON, ObjectEventMap } from '../types.js'
+
+interface SkCanvas {
+  save(): number
+  restore(): void
+  concat(matrix: number[]): void
+  clipRect(rect: number[], op: unknown, doAntiAlias: boolean): void
+}
+
+interface GroupCK {
+  LTRBRect(l: number, t: number, r: number, b: number): Float32Array
+  ClipOp: { Intersect: unknown }
+}
+
+export interface GroupProps extends BaseObjectProps {
+  /** When true, children are clipped to the group's bounding box. Default: false. */
+  clip?: boolean
+}
+
+/** Container for other objects. Transforms compose onto all children. */
+export class Group extends BaseObject {
+  /** When true, children are clipped to this group's local bounds. */
+  clip: boolean
+  private _children: BaseObject[] = []
+
+  constructor(props: GroupProps = {}) {
+    super(props)
+    this.clip = props.clip ?? false
+  }
+
+  get children(): readonly BaseObject[] {
+    return this._children
+  }
+
+  // ---------------------------------------------------------------------------
+  // Child management
+  // ---------------------------------------------------------------------------
+
+  add(object: BaseObject): this {
+    if (object.parent !== null) {
+      throw new Error(`Object "${object.id}" already has a parent. Remove it first.`)
+    }
+    this._children.push(object)
+    object.parent = this
+    return this
+  }
+
+  remove(object: BaseObject): this {
+    const index = this._children.indexOf(object)
+    if (index === -1) return this
+    this._children.splice(index, 1)
+    object.parent = null
+    return this
+  }
+
+  /** Remove all children. */
+  clear(): this {
+    for (const child of this._children) {
+      child.parent = null
+    }
+    this._children = []
+    return this
+  }
+
+  getById(id: string): BaseObject | undefined {
+    for (const child of this._children) {
+      if (child.id === id) return child
+      if (child instanceof Group) {
+        const found = child.getById(id)
+        if (found !== undefined) return found
+      }
+    }
+    return undefined
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transform & bounds
+  // ---------------------------------------------------------------------------
+
+  /** Group's bounding box is the union of all visible children's world bounding boxes. */
+  getWorldBoundingBox(): BoundingBox {
+    if (this._children.length === 0) {
+      return new BoundingBox(this.x, this.y, 0, 0)
+    }
+    const visible = this._children.filter((c) => c.visible)
+    if (visible.length === 0) return new BoundingBox(this.x, this.y, 0, 0)
+    return visible.map((c) => c.getWorldBoundingBox()).reduce((acc, box) => acc.union(box))
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hit testing — checks children in reverse order (top-most first)
+  // ---------------------------------------------------------------------------
+
+  hitTest(worldX: number, worldY: number, tolerance = 4): boolean {
+    if (!this.visible) return false
+    for (let i = this._children.length - 1; i >= 0; i--) {
+      if (this._children[i]!.hitTest(worldX, worldY, tolerance)) return true
+    }
+    return false
+  }
+
+  /** Returns the topmost child that contains the point, or null. */
+  hitTestChild(worldX: number, worldY: number, tolerance = 4): BaseObject | null {
+    for (let i = this._children.length - 1; i >= 0; i--) {
+      const child = this._children[i]!
+      if (child instanceof Group) {
+        const hit = child.hitTestChild(worldX, worldY, tolerance)
+        if (hit !== null) return hit
+      } else if (child.hitTest(worldX, worldY, tolerance)) {
+        return child
+      }
+    }
+    return null
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+
+  render(ctx: RenderContext): void {
+    if (!this.visible || this.opacity === 0 || !ctx.skCanvas) return
+    const canvas = ctx.skCanvas as SkCanvas
+    const ck = ctx.canvasKit as GroupCK
+
+    canvas.save()
+    // Push this group's local transform — children will push their own,
+    // building up the full world transform via canvas state accumulation.
+    canvas.concat(Array.from(this.getLocalTransform().values))
+
+    if (this.clip) {
+      const rect = Array.from(ck.LTRBRect(0, 0, this.width, this.height))
+      canvas.clipRect(rect, ck.ClipOp.Intersect, true)
+    }
+
+    for (const child of this._children) {
+      if (child.visible) child.render(ctx)
+    }
+
+    canvas.restore()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Events — bubble up from children
+  // ---------------------------------------------------------------------------
+
+  emit<K extends keyof ObjectEventMap>(event: K, data: ObjectEventMap[K]): void {
+    super.emit(event, data)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Serialization
+  // ---------------------------------------------------------------------------
+
+  getType(): string {
+    return 'Group'
+  }
+
+  toJSON(): ObjectJSON {
+    return {
+      ...super.toJSON(),
+      clip: this.clip,
+      children: this._children.map((c) => c.toJSON()),
+    }
+  }
+
+  static fromJSON(json: ObjectJSON): Group {
+    const obj = new Group({ clip: json['clip'] === true })
+    obj.applyBaseJSON(json)
+    const children = json['children']
+    if (Array.isArray(children)) {
+      for (const childJson of children as ObjectJSON[]) {
+        obj.add(objectFromJSON(childJson))
+      }
+    }
+    return obj
+  }
+
+  destroy(): void {
+    for (const child of this._children) {
+      child.destroy()
+    }
+    this._children = []
+    super.destroy()
+  }
+}

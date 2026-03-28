@@ -1,0 +1,39 @@
+{
+  "name": "nexvas",
+  "private": true,
+  "version": "0.0.0",
+  "description": "High-performance 2D NexVas backed by CanvasKit (Skia)",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:run": "pnpm -r run test:run",
+    "test:visual": "pnpm -F @nexvas/core run test:visual",
+    "test:visual:update": "pnpm -F @nexvas/core run test:visual:update",
+    "lint": "eslint packages --ext .ts,.tsx",
+    "lint:fix": "eslint packages --ext .ts,.tsx --fix",
+    "format": "prettier --write \"packages/**/*.{ts,tsx,json}\" \"examples/**/*.{ts,tsx,html}\"",
+    "format:check": "prettier --check \"packages/**/*.{ts,tsx,json}\"",
+    "typecheck": "pnpm --filter @nexvas/core run build && pnpm -r run typecheck",
+    "benchmark": "pnpm -r run benchmark",
+    "docs:dev": "pnpm -F @nexvas/docs dev",
+    "docs:build": "pnpm -F @nexvas/docs build",
+    "docs:preview": "pnpm -F @nexvas/docs preview",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^10.1.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

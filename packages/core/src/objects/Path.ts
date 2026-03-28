@@ -1,0 +1,132 @@
+import { BaseObject, type BaseObjectProps } from './BaseObject.js'
+import { makeFillPaint, makeStrokePaint, type PaintCK } from '../renderer/paint.js'
+import type { RenderContext, ObjectJSON } from '../types.js'
+
+interface SkPath {
+  contains(x: number, y: number): boolean
+  getBounds(output?: Float32Array): Float32Array
+  delete(): void
+}
+
+interface SkCanvas {
+  save(): number
+  restore(): void
+  concat(matrix: number[]): void
+  drawPath(path: SkPath, paint: unknown): void
+}
+
+interface PathCK extends PaintCK {
+  Path: {
+    MakeFromSVGString(svg: string): SkPath | null
+  }
+}
+
+export interface PathProps extends BaseObjectProps {
+  /** SVG path data string, e.g. "M 0 0 L 100 100 Z" */
+  d?: string
+}
+
+/**
+ * Arbitrary SVG-compatible path.
+ * Hit testing uses Skia's SkPath.contains() for pixel-precise results.
+ * The parsed SkPath is cached and invalidated when `d` changes.
+ */
+export class Path extends BaseObject {
+  private _d: string
+  /** Cached CanvasKit path — recreated when `d` changes. */
+  private _skPath: SkPath | null = null
+  private _skPathCK: PathCK | null = null
+
+  constructor(props: PathProps = {}) {
+    super(props)
+    this._d = props.d ?? ''
+  }
+
+  get d(): string {
+    return this._d
+  }
+
+  set d(value: string) {
+    if (value !== this._d) {
+      this._d = value
+      this._invalidatePath()
+    }
+  }
+
+  private _invalidatePath(): void {
+    if (this._skPath) {
+      this._skPath.delete()
+      this._skPath = null
+    }
+  }
+
+  private _ensurePath(ck: PathCK): SkPath | null {
+    if (this._skPath && this._skPathCK === ck) return this._skPath
+    this._invalidatePath()
+    if (!this._d) return null
+    this._skPath = ck.Path.MakeFromSVGString(this._d) ?? null
+    this._skPathCK = ck
+    return this._skPath
+  }
+
+  getType(): string {
+    return 'Path'
+  }
+
+  /**
+   * Precise hit test using Skia's SkPath.contains().
+   * Falls back to bounding box when CanvasKit is not available.
+   */
+  hitTest(worldX: number, worldY: number, tolerance = 4): boolean {
+    if (!this.visible) return false
+    // Try precise hit test if we have a cached path
+    if (this._skPath) {
+      const wt = this.getWorldTransform()
+      const local = wt.inverse().transformPoint(worldX, worldY)
+      return this._skPath.contains(local.x, local.y)
+    }
+    return this.getWorldBoundingBox().contains(worldX, worldY, tolerance)
+  }
+
+  render(ctx: RenderContext): void {
+    if (!this.visible || !ctx.skCanvas || !this._d) return
+    const ck = ctx.canvasKit as PathCK
+    const canvas = ctx.skCanvas as SkCanvas
+
+    const skPath = this._ensurePath(ck)
+    if (!skPath) return
+
+    canvas.save()
+    canvas.concat(Array.from(this.getLocalTransform().values))
+
+    if (this.fill) {
+      const paint = makeFillPaint(ck, this.fill, this.opacity)
+      canvas.drawPath(skPath, paint)
+      paint.delete()
+    }
+
+    if (this.stroke) {
+      const paint = makeStrokePaint(ck, this.stroke, this.opacity)
+      canvas.drawPath(skPath, paint)
+      paint.delete()
+    }
+
+    canvas.restore()
+  }
+
+  toJSON(): ObjectJSON {
+    return { ...super.toJSON(), d: this._d }
+  }
+
+  static fromJSON(json: ObjectJSON): Path {
+    const obj = new Path()
+    obj.applyBaseJSON(json)
+    if (json['d'] !== undefined) obj.d = json['d'] as string
+    return obj
+  }
+
+  destroy(): void {
+    this._invalidatePath()
+    super.destroy()
+  }
+}

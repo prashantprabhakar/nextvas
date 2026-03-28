@@ -1,0 +1,60 @@
+// Core entry point — public API for @nexvas/core
+
+export { Stage, type StageOptions } from './Stage.js'
+export { Layer } from './Layer.js'
+export { Viewport, type ViewportOptions, type AnimateToOptions } from './Viewport.js'
+export { EventSystem } from './EventSystem.js'
+export { PluginRegistry } from './PluginRegistry.js'
+export { FontManager } from './FontManager.js'
+
+// Objects
+export {
+  BaseObject,
+  type BaseObjectProps,
+  type EventHandler,
+  Rect,
+  type RectProps,
+  Circle,
+  Line,
+  type LineProps,
+  Text,
+  type TextProps,
+  type TextAlign,
+  type TextBaseline,
+  CanvasImage,
+  type ImageProps,
+  Path,
+  type PathProps,
+  Group,
+  type GroupProps,
+} from './objects/index.js'
+export { objectFromJSON } from './objects/objectFromJSON.js'
+export { migrate, CURRENT_SCHEMA_VERSION } from './migrate.js'
+
+// Math
+export { Vec2, Matrix3x3, BoundingBox } from './math/index.js'
+
+// Types
+export type {
+  Plugin,
+  RenderContext,
+  RenderPass,
+  RenderPassPhase,
+  SceneJSON,
+  LayerJSON,
+  ObjectJSON,
+  ViewportState,
+  StageInterface,
+  StageEventMap,
+  ObjectEventMap,
+  CanvasPointerEvent,
+  CanvasWheelEvent,
+  PointerPosition,
+  Fill,
+  SolidFill,
+  LinearGradientFill,
+  StrokeStyle,
+  StrokeLineCap,
+  StrokeLineJoin,
+  ColorRGBA,
+} from './types.js'

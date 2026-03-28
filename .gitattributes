@@ -1,0 +1,12 @@
+# Enforce LF line endings for all text files — prevents CRLF/LF conflicts
+# across Windows/macOS/Linux contributors.
+* text=auto eol=lf
+
+# Binaries — no line ending conversion
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.wasm binary
+*.ico  binary
+*.pdf  binary
