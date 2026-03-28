@@ -1,4 +1,5 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
+import { BoundingBox } from '../math/BoundingBox.js'
 import { makeFillPaint, makeStrokePaint, type PaintCK } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
 
@@ -67,6 +68,22 @@ export class Path extends BaseObject {
     this._skPath = ck.Path.MakeFromSVGString(this._d) ?? null
     this._skPathCK = ck
     return this._skPath
+  }
+
+  /**
+   * Returns the bounding box of the path.
+   * When the SkPath has been parsed, uses Skia's getBounds() for accuracy.
+   * Before the first render (SkPath not yet created), returns a large box so
+   * the viewport culling pass never incorrectly discards an unrendered path.
+   */
+  getLocalBoundingBox(): BoundingBox {
+    if (this._skPath) {
+      const b = this._skPath.getBounds()
+      return new BoundingBox(b[0]!, b[1]!, b[2]! - b[0]!, b[3]! - b[1]!)
+    }
+    // Not yet parsed — skip culling by returning a large sentinel box.
+    const LARGE = 1e7
+    return new BoundingBox(-LARGE, -LARGE, LARGE * 2, LARGE * 2)
   }
 
   getType(): string {

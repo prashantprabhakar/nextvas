@@ -100,6 +100,26 @@ stage.startLoop()
 
 ---
 
+## Examples
+
+Clone the repo and run any example locally:
+
+```bash
+git clone https://github.com/prashantprabhakar/nexvas.git
+cd nexvas
+pnpm install
+pnpm --filter @nexvas/core run build
+```
+
+| Example | Run | Description |
+|---|---|---|
+| Basic | `pnpm --filter @nexvas-examples/basic dev` | Minimal stage setup with a Rect and Circle |
+| Free Drawing | `pnpm --filter @nexvas-examples/free-drawing dev` | Freehand drawing with color picker and undo |
+
+Each example has its own `README.md` with details.
+
+---
+
 ## Browser Support
 
 WebAssembly SIMD + WebGL2 required.

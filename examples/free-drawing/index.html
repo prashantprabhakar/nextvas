@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NexVas — Free Drawing</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box }
+
+      body {
+        background: #f8f8f6;
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+        user-select: none;
+      }
+
+      #canvas {
+        display: block;
+        cursor: crosshair;
+        touch-action: none;
+      }
+
+      /* ── Toolbar ─────────────────────────────────────────────────── */
+      .toolbar {
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff;
+        border-radius: 999px;
+        padding: 10px 16px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08);
+      }
+
+      .divider {
+        width: 1px;
+        height: 24px;
+        background: #e5e5e5;
+        margin: 0 4px;
+      }
+
+      /* Color swatches */
+      .color-swatch {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: transform 0.1s, border-color 0.1s;
+        flex-shrink: 0;
+      }
+
+      .color-swatch:hover       { transform: scale(1.2) }
+      .color-swatch.active      { border-color: #555; transform: scale(1.15) }
+      .color-swatch.light.active { border-color: #aaa }
+
+      /* Stroke width buttons */
+      .width-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.1s;
+        flex-shrink: 0;
+      }
+
+      .width-btn:hover  { background: #f0f0f0 }
+      .width-btn.active { background: #e8e8e8 }
+
+      .width-dot {
+        border-radius: 50%;
+        background: #1a1a2e;
+        pointer-events: none;
+      }
+
+      /* Action buttons */
+      .action-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        transition: background 0.1s;
+        color: #555;
+        flex-shrink: 0;
+      }
+
+      .action-btn:hover  { background: #f0f0f0 }
+      .action-btn:active { background: #e0e0e0 }
+
+      /* Loading overlay */
+      #loading {
+        position: fixed;
+        inset: 0;
+        background: #f8f8f6;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-family: system-ui, sans-serif;
+        color: #888;
+        font-size: 14px;
+        z-index: 100;
+      }
+
+      .spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #e0e0e0;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+
+      @keyframes spin { to { transform: rotate(360deg) } }
+    </style>
+  </head>
+  <body>
+    <div id="loading">
+      <div class="spinner"></div>
+      <span>Loading NexVas…</span>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div class="toolbar" id="toolbar" style="display:none">
+
+      <!-- Color palette -->
+      <button class="color-swatch active"        data-color="#1a1a2e" style="background:#1a1a2e" title="Black"></button>
+      <button class="color-swatch"               data-color="#6b7280" style="background:#6b7280" title="Gray"></button>
+      <button class="color-swatch"               data-color="#ef4444" style="background:#ef4444" title="Red"></button>
+      <button class="color-swatch"               data-color="#f97316" style="background:#f97316" title="Orange"></button>
+      <button class="color-swatch"               data-color="#eab308" style="background:#eab308" title="Yellow"></button>
+      <button class="color-swatch"               data-color="#22c55e" style="background:#22c55e" title="Green"></button>
+      <button class="color-swatch"               data-color="#3b82f6" style="background:#3b82f6" title="Blue"></button>
+      <button class="color-swatch"               data-color="#a855f7" style="background:#a855f7" title="Purple"></button>
+      <button class="color-swatch light"         data-color="#f9a8d4" style="background:#f9a8d4" title="Pink"></button>
+      <button class="color-swatch light"         data-color="#ffffff" style="background:#ffffff;border:2px solid #e0e0e0" title="White / Eraser"></button>
+
+      <div class="divider"></div>
+
+      <!-- Stroke widths -->
+      <button class="width-btn active" data-width="3"  title="Thin">
+        <span class="width-dot" style="width:3px;height:3px"></span>
+      </button>
+      <button class="width-btn"        data-width="7"  title="Medium">
+        <span class="width-dot" style="width:7px;height:7px"></span>
+      </button>
+      <button class="width-btn"        data-width="18" title="Thick">
+        <span class="width-dot" style="width:13px;height:13px"></span>
+      </button>
+
+      <div class="divider"></div>
+
+      <!-- Actions -->
+      <button class="action-btn" id="undo-btn"  title="Undo (Ctrl+Z)">↩</button>
+      <button class="action-btn" id="clear-btn" title="Clear canvas">🗑</button>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

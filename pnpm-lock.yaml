@@ -90,6 +90,19 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1(@types/node@12.20.55)(esbuild@0.21.5)
 
+  examples/free-drawing:
+    dependencies:
+      '@nexvas/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@nexvas/renderer':
+        specifier: workspace:*
+        version: link:../../packages/renderer
+    devDependencies:
+      vite:
+        specifier: ^8.0.1
+        version: 8.0.1(@types/node@12.20.55)(esbuild@0.21.5)
+
   packages/core:
     devDependencies:
       '@types/jsdom':

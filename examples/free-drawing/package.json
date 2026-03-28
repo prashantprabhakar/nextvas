@@ -1,0 +1,17 @@
+{
+  "name": "@nexvas-examples/free-drawing",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@nexvas/core": "workspace:*",
+    "@nexvas/renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.0.1"
+  }
+}
