@@ -20,7 +20,7 @@ interface SkCanvas {
 }
 
 interface SelectionCK {
-  Paint(): SkPaint
+  Paint: new () => SkPaint
   Color4f(r: number, g: number, b: number, a: number): Float32Array
   PaintStyle: { Fill: unknown; Stroke: unknown }
   PathEffect: { MakeDash(intervals: number[], phase: number): unknown }
@@ -44,8 +44,8 @@ type HandleId = 'tl' | 'tc' | 'tr' | 'ml' | 'mr' | 'bl' | 'bc' | 'br' | 'rot'
 
 interface Handle {
   id: HandleId
-  x: number // screen-space x
-  y: number // screen-space y
+  x: number // world-space x
+  y: number // world-space y
 }
 
 const HANDLE_SIZE = 8 // half-size (handle is HANDLE_SIZE*2 square)
@@ -56,8 +56,6 @@ const ROT_HANDLE_OFFSET = 24 // pixels above top-center
 // ---------------------------------------------------------------------------
 interface DragState {
   type: 'move' | 'resize' | 'rotate' | 'marquee'
-  startScreenX: number
-  startScreenY: number
   startWorldX: number
   startWorldY: number
   // move/resize: snapshot of initial object positions
@@ -67,7 +65,7 @@ interface DragState {
   >
   // resize handle
   handle?: HandleId
-  // marquee
+  // marquee bounds in world space
   marqueeX?: number
   marqueeY?: number
   marqueeW?: number
@@ -82,6 +80,15 @@ export interface SelectionPluginOptions {
   selectionColor?: { r: number; g: number; b: number; a: number }
   /** Allow deleting selected objects with Delete/Backspace keys. Default: true. */
   allowDelete?: boolean
+}
+
+/**
+ * Type augmentation for accessing SelectionPlugin through the stage.
+ * @example
+ * const sel = (stage as SelectionPluginAPI).selection
+ */
+export interface SelectionPluginAPI {
+  selection: SelectionPlugin
 }
 
 type ChangeHandler = (selected: BaseObject[]) => void
@@ -133,6 +140,7 @@ export class SelectionPlugin implements Plugin {
 
   install(stage: StageInterface): void {
     this._stage = stage
+    ;(stage as unknown as SelectionPluginAPI).selection = this
 
     stage.on('mousedown', this._onMouseDown)
     stage.on('mousemove', this._onMouseMove)
@@ -215,20 +223,31 @@ export class SelectionPlugin implements Plugin {
     this._stage?.markDirty()
   }
 
-  /** Returns a copy of the selected objects array. */
+  /** All currently selected objects. */
+  get selected(): readonly BaseObject[] {
+    return Array.from(this._selected)
+  }
+
+  /** @deprecated Use `.selected` instead. */
   getSelected(): BaseObject[] {
     return Array.from(this._selected)
   }
 
-  /** Listen for selection changes. */
+  /** Alias for clearSelection(). */
+  deselectAll(): void {
+    this.clearSelection()
+  }
+
+  /** Listen for selection changes. Returns an unsubscribe function. */
   onChange(handler: ChangeHandler): () => void {
     this._changeHandlers.add(handler)
     return () => this._changeHandlers.delete(handler)
   }
 
   private _emitChange(): void {
-    const selected = this.getSelected()
+    const selected = Array.from(this._selected)
     this._changeHandlers.forEach((h) => h(selected))
+    this._stage?.emit('selection:change', { selected })
   }
 
   // ---------------------------------------------------------------------------
@@ -277,7 +296,7 @@ export class SelectionPlugin implements Plugin {
 
   private _handleMouseMove(e: CanvasPointerEvent): void {
     if (!this._dragState || !this._stage) return
-    const { world, screen } = e
+    const { world } = e
 
     const ds = this._dragState
     const dWorldX = world.x - ds.startWorldX
@@ -295,10 +314,11 @@ export class SelectionPlugin implements Plugin {
     } else if (ds.type === 'resize' && ds.handle) {
       this._applyResize(ds.handle, dWorldX, dWorldY)
     } else if (ds.type === 'marquee') {
-      ds.marqueeX = Math.min(screen.x, ds.startScreenX)
-      ds.marqueeY = Math.min(screen.y, ds.startScreenY)
-      ds.marqueeW = Math.abs(screen.x - ds.startScreenX)
-      ds.marqueeH = Math.abs(screen.y - ds.startScreenY)
+      // Track marquee in world space so finalization and drawing are consistent
+      ds.marqueeX = Math.min(world.x, ds.startWorldX)
+      ds.marqueeY = Math.min(world.y, ds.startWorldY)
+      ds.marqueeW = Math.abs(world.x - ds.startWorldX)
+      ds.marqueeH = Math.abs(world.y - ds.startWorldY)
     }
 
     this._stage.markDirty()
@@ -319,14 +339,16 @@ export class SelectionPlugin implements Plugin {
     if (!this._stage || this._selected.size === 0) return
     if (e.key !== 'Delete' && e.key !== 'Backspace') return
 
-    // Remove selected objects from their layers
-    for (const obj of this._selected) {
-      for (const layer of this._stage.layers) {
-        if (layer.objects.includes(obj)) {
-          layer.remove(obj)
-          break
-        }
+    // Build a reverse index: object id -> layer (single pass over all layers)
+    const objToLayer = new Map<string, typeof this._stage.layers[0]>()
+    for (const layer of this._stage.layers) {
+      for (const obj of layer.objects) {
+        objToLayer.set(obj.id, layer)
       }
+    }
+    // Now remove in O(k) where k = selected objects
+    for (const obj of this._selected) {
+      objToLayer.get(obj.id)?.remove(obj)
     }
     this._selected.clear()
     this._emitChange()
@@ -353,8 +375,6 @@ export class SelectionPlugin implements Plugin {
     }
     this._dragState = {
       type,
-      startScreenX: e.screen.x,
-      startScreenY: e.screen.y,
       startWorldX: e.world.x,
       startWorldY: e.world.y,
       initialPositions,
@@ -422,7 +442,7 @@ export class SelectionPlugin implements Plugin {
       for (const obj of layer.objects) {
         if (!obj.visible || obj.locked) continue
         const bb = obj.getWorldBoundingBox()
-        // Inline intersects check (both in screen-ish space for marquee)
+        // Intersects check — both marquee and bb are in world space
         const intersects =
           mLeft < bb.right && mRight > bb.left && mTop < bb.bottom && mBottom > bb.top
         if (intersects) {
@@ -452,12 +472,15 @@ export class SelectionPlugin implements Plugin {
   // ---------------------------------------------------------------------------
 
   private _getHandles(): Handle[] {
-    if (this._selected.size === 0) return []
-    const bb = this._getSelectionScreenBB()
+    if (this._selected.size === 0 || !this._stage) return []
+    const bb = this._getSelectionBB()
     if (!bb) return []
     const { x, y, r, b } = bb
     const cx = (x + r) / 2
     const cy = (y + b) / 2
+    // Rotation handle offset in world units so it stays at a fixed screen-pixel distance
+    const invScale = 1 / this._stage.viewport.scale
+    const rotOffset = ROT_HANDLE_OFFSET * invScale
     return [
       { id: 'tl', x, y },
       { id: 'tc', x: cx, y },
@@ -467,24 +490,25 @@ export class SelectionPlugin implements Plugin {
       { id: 'bl', x, y: b },
       { id: 'bc', x: cx, y: b },
       { id: 'br', x: r, y: b },
-      { id: 'rot', x: cx, y: y - ROT_HANDLE_OFFSET },
+      { id: 'rot', x: cx, y: y - rotOffset },
     ]
   }
 
   private _hitTestHandle(screenX: number, screenY: number): HandleId | null {
+    if (!this._stage) return null
+    // Convert screen click to world space to compare with world-space handle positions
+    const world = this._stage.viewport.screenToWorld(screenX, screenY)
+    const threshold = (HANDLE_SIZE + 2) / this._stage.viewport.scale
     for (const handle of this._getHandles()) {
-      if (
-        Math.abs(screenX - handle.x) <= HANDLE_SIZE + 2 &&
-        Math.abs(screenY - handle.y) <= HANDLE_SIZE + 2
-      ) {
+      if (Math.abs(world.x - handle.x) <= threshold && Math.abs(world.y - handle.y) <= threshold) {
         return handle.id
       }
     }
     return null
   }
 
-  /** Returns the combined bounding box of all selected objects in world space. */
-  private _getSelectionScreenBB(): { x: number; y: number; r: number; b: number } | null {
+  /** Returns the combined world-space bounding box of all selected objects. */
+  private _getSelectionBB(): { x: number; y: number; r: number; b: number } | null {
     if (!this._stage || this._selected.size === 0) return null
 
     let minX = Infinity,
@@ -514,105 +538,93 @@ export class SelectionPlugin implements Plugin {
     const canvas = ctx.skCanvas as SkCanvas
     const vp = ctx.viewport
     const color = this._options.selectionColor
+    // invScale keeps stroke widths and handle sizes constant in screen pixels regardless of zoom
+    const invScale = 1 / vp.scale
 
-    // Draw selection border for each selected object
+    // Draw selection border for each selected object in world space
     for (const obj of this._selected) {
       const bb = obj.getWorldBoundingBox()
-      // Convert to screen space
-      const sx = bb.x * vp.scale + vp.x
-      const sy = bb.y * vp.scale + vp.y
-      const sw = bb.width * vp.scale
-      const sh = bb.height * vp.scale
 
-      // Dashed border
-      const borderPaint = ck.Paint()
+      const borderPaint = new ck.Paint()
       borderPaint.setStyle(ck.PaintStyle.Stroke)
       borderPaint.setColor(ck.Color4f(color.r, color.g, color.b, color.a))
       borderPaint.setAntiAlias(true)
-      borderPaint.setStrokeWidth(1.5)
+      borderPaint.setStrokeWidth(1.5 * invScale)
       if (ck.PathEffect) {
-        borderPaint.setPathEffect(ck.PathEffect.MakeDash([5, 3], 0))
+        borderPaint.setPathEffect(ck.PathEffect.MakeDash([5 * invScale, 3 * invScale], 0))
       }
-      canvas.drawRect([sx, sy, sx + sw, sy + sh], borderPaint)
+      canvas.drawRect([bb.x, bb.y, bb.right, bb.bottom], borderPaint)
       borderPaint.delete()
     }
 
-    // Draw handles on combined bounding box
-    const bb = this._getSelectionScreenBB()
+    // Draw handles on combined world-space bounding box
+    const bb = this._getSelectionBB()
     if (!bb) return
 
     const { x, y, r, b } = bb
     const cx = (x + r) / 2
-    const cy = (y + b) / 2
+    const rotOffset = ROT_HANDLE_OFFSET * invScale
 
-    // Rotation handle line
-    const linePaint = ck.Paint()
+    // Rotation handle line — from top-center to rotation handle position
+    const linePaint = new ck.Paint()
     linePaint.setStyle(ck.PaintStyle.Stroke)
     linePaint.setColor(ck.Color4f(color.r, color.g, color.b, color.a))
-    linePaint.setStrokeWidth(1.5)
+    linePaint.setStrokeWidth(1.5 * invScale)
     linePaint.setAntiAlias(true)
-    canvas.drawLine(
-      cx * vp.scale + vp.x,
-      y * vp.scale + vp.y,
-      cx * vp.scale + vp.x,
-      (y - ROT_HANDLE_OFFSET) * vp.scale + vp.y,
-      linePaint,
-    )
+    canvas.drawLine(cx, y, cx, y - rotOffset, linePaint)
     linePaint.delete()
 
     const handles: Array<{ hx: number; hy: number; isRot: boolean }> = [
       { hx: x, hy: y, isRot: false },
       { hx: cx, hy: y, isRot: false },
       { hx: r, hy: y, isRot: false },
-      { hx: x, hy: cy, isRot: false },
-      { hx: r, hy: cy, isRot: false },
+      { hx: x, hy: (y + b) / 2, isRot: false },
+      { hx: r, hy: (y + b) / 2, isRot: false },
       { hx: x, hy: b, isRot: false },
       { hx: cx, hy: b, isRot: false },
       { hx: r, hy: b, isRot: false },
-      { hx: cx, hy: y - ROT_HANDLE_OFFSET, isRot: true },
+      { hx: cx, hy: y - rotOffset, isRot: true },
     ]
 
-    for (const { hx, hy, isRot } of handles) {
-      const sx = hx * vp.scale + vp.x
-      const sy = hy * vp.scale + vp.y
+    // Handle sizes in world units so they appear at a fixed screen-pixel size
+    const hs = (HANDLE_SIZE / 2) * invScale
+    const circleR = (HANDLE_SIZE / 2) * invScale
 
-      // White fill
-      const fillPaint = ck.Paint()
+    for (const { hx, hy, isRot } of handles) {
+      const fillPaint = new ck.Paint()
       fillPaint.setStyle(ck.PaintStyle.Fill)
       fillPaint.setColor(ck.Color4f(1, 1, 1, 1))
       fillPaint.setAntiAlias(true)
 
-      // Blue stroke
-      const strokePaint = ck.Paint()
+      const strokePaint = new ck.Paint()
       strokePaint.setStyle(ck.PaintStyle.Stroke)
       strokePaint.setColor(ck.Color4f(color.r, color.g, color.b, color.a))
-      strokePaint.setStrokeWidth(1.5)
+      strokePaint.setStrokeWidth(1.5 * invScale)
       strokePaint.setAntiAlias(true)
 
       if (isRot) {
-        canvas.drawCircle(sx, sy, HANDLE_SIZE / 2, fillPaint)
-        canvas.drawCircle(sx, sy, HANDLE_SIZE / 2, strokePaint)
+        canvas.drawCircle(hx, hy, circleR, fillPaint)
+        canvas.drawCircle(hx, hy, circleR, strokePaint)
       } else {
-        const hs = HANDLE_SIZE / 2
-        canvas.drawRect([sx - hs, sy - hs, sx + hs, sy + hs], fillPaint)
-        canvas.drawRect([sx - hs, sy - hs, sx + hs, sy + hs], strokePaint)
+        canvas.drawRect([hx - hs, hy - hs, hx + hs, hy + hs], fillPaint)
+        canvas.drawRect([hx - hs, hy - hs, hx + hs, hy + hs], strokePaint)
       }
 
       fillPaint.delete()
       strokePaint.delete()
     }
 
-    // Draw marquee if active
+    // Draw marquee if active — marquee bounds are tracked in world space
     if (this._dragState?.type === 'marquee') {
       const { marqueeX, marqueeY, marqueeW, marqueeH } = this._dragState
       if (marqueeX !== undefined && marqueeW && marqueeH) {
-        const marqueePaint = ck.Paint()
+        const marqueePaint = new ck.Paint()
         marqueePaint.setStyle(ck.PaintStyle.Stroke)
         marqueePaint.setColor(ck.Color4f(color.r, color.g, color.b, 0.8))
-        marqueePaint.setStrokeWidth(1)
+        marqueePaint.setStrokeWidth(1 * invScale)
         marqueePaint.setAntiAlias(true)
         if (ck.PathEffect) {
-          marqueePaint.setPathEffect(ck.PathEffect.MakeDash([4, 4], 0))
+          marqueePaint.setPathEffect(ck.PathEffect.MakeDash([4 * invScale, 4 * invScale], 0))
         }
         canvas.drawRect(
           [marqueeX, marqueeY!, marqueeX + marqueeW, marqueeY! + marqueeH],

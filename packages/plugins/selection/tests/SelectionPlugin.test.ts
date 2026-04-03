@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SelectionPlugin } from '../src/SelectionPlugin.js'
 import { Rect, Layer } from '@nexvas/core'
-import type { StageInterface, CanvasPointerEvent, RenderPass, BoundingBox } from '@nexvas/core'
+import type { StageInterface, CanvasPointerEvent, RenderPass, BoundingBox, Viewport, FontManager } from '@nexvas/core'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,6 +42,12 @@ function makeStage(layerObjects: Rect[] = []): StageInterface {
     get layers() {
       return [layer] as unknown as readonly Layer[]
     },
+    viewport: {
+      x: 0, y: 0, scale: 1, width: 800, height: 600,
+      getState: () => ({ x: 0, y: 0, scale: 1, width: 800, height: 600 }),
+      screenToWorld: (sx: number, sy: number) => ({ x: sx, y: sy }),
+    } as unknown as Viewport,
+    fonts: {} as unknown as FontManager,
     on(event: string, handler: EventHandler) {
       if (!handlers.has(event)) handlers.set(event, new Set())
       handlers.get(event)!.add(handler)
@@ -64,6 +70,8 @@ function makeStage(layerObjects: Rect[] = []): StageInterface {
     },
     render: vi.fn(),
     markDirty: vi.fn(),
+    emit: vi.fn(),
+    resize: vi.fn(),
     // Test helper: fire an event
     _fire(event: string, data: unknown) {
       handlers.get(event)?.forEach((h) => h(data))

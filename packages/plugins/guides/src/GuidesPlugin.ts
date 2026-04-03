@@ -15,7 +15,7 @@ interface SkCanvas {
 }
 
 interface GuidesCK {
-  Paint(): SkPaint
+  Paint: new () => SkPaint
   Color4f(r: number, g: number, b: number, a: number): Float32Array
   PaintStyle: { Stroke: unknown }
   PathEffect: { MakeDash(intervals: number[], phase: number): unknown }
@@ -56,6 +56,15 @@ export interface GuidesPluginOptions {
    * Color of guide lines. Default: red-pink.
    */
   color?: { r: number; g: number; b: number; a: number }
+}
+
+/**
+ * Type augmentation for accessing GuidesPlugin through the stage.
+ * @example
+ * const guides = (stage as GuidesPluginAPI).guides
+ */
+export interface GuidesPluginAPI {
+  guides: GuidesPlugin
 }
 
 /**
@@ -100,6 +109,7 @@ export class GuidesPlugin implements Plugin {
 
   install(stage: StageInterface): void {
     this._stage = stage
+    ;(stage as unknown as GuidesPluginAPI).guides = this
     stage.on('mousedown', this._onMouseDown)
     stage.on('mousemove', this._onMouseMove)
     stage.on('mouseup', this._onMouseUp)
@@ -250,6 +260,20 @@ export class GuidesPlugin implements Plugin {
   }
 
   // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  /** Returns currently active guide lines (axis and world-space position). */
+  getActiveGuides(): Array<{ axis: 'x' | 'y'; position: number }> {
+    return [...this._activeGuides]
+  }
+
+  /** Update snap threshold at runtime without reinstalling the plugin. */
+  setSnapThreshold(threshold: number): void {
+    this._options.snapThreshold = threshold
+  }
+
+  // ---------------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------------
 
@@ -266,7 +290,7 @@ export class GuidesPlugin implements Plugin {
     const worldRight = worldLeft + (vp.width ?? 4000) * invScale
     const worldBottom = worldTop + (vp.height ?? 4000) * invScale
 
-    const paint = ck.Paint()
+    const paint = new ck.Paint()
     paint.setStyle(ck.PaintStyle.Stroke)
     paint.setColor(ck.Color4f(color.r, color.g, color.b, color.a))
     paint.setAntiAlias(true)

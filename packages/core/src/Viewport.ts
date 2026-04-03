@@ -42,8 +42,8 @@ export class Viewport {
   private _animOnComplete: (() => void) | null = null
   private _onChange: (() => void) | null = null
 
-  readonly minScale: number
-  readonly maxScale: number
+  minScale: number
+  maxScale: number
 
   constructor(options: ViewportOptions = {}) {
     this.minScale = options.minScale ?? 0.01
@@ -117,6 +117,36 @@ export class Viewport {
     this._y = 0
     this._scale = 1
     this._onChange?.()
+  }
+
+  /**
+   * Set pan and/or zoom in one call. Only the provided keys are changed.
+   * Equivalent to calling panTo() and setScale() but batched into a single
+   * onChange notification.
+   */
+  setState(state: { x?: number; y?: number; scale?: number }): void {
+    this._cancelAnimation()
+    if (state.x !== undefined) this._x = state.x
+    if (state.y !== undefined) this._y = state.y
+    if (state.scale !== undefined) {
+      this._scale = Math.min(this.maxScale, Math.max(this.minScale, state.scale))
+    }
+    this._onChange?.()
+  }
+
+  /**
+   * Update viewport constraints at runtime.
+   * Useful when the valid zoom range changes (e.g. based on content size).
+   */
+  setOptions(options: { minScale?: number; maxScale?: number }): void {
+    if (options.minScale !== undefined) this.minScale = options.minScale
+    if (options.maxScale !== undefined) this.maxScale = options.maxScale
+    // Clamp current scale to new bounds
+    const clamped = Math.min(this.maxScale, Math.max(this.minScale, this._scale))
+    if (clamped !== this._scale) {
+      this._scale = clamped
+      this._onChange?.()
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -1,1 +1,1 @@
-export { ExportPlugin, type ExportPluginOptions } from './ExportPlugin.js'
+export { ExportPlugin, type ExportPluginOptions, type ExportPluginAPI } from './ExportPlugin.js'

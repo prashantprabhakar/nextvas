@@ -44,7 +44,6 @@ const DEFAULT_FONT_NAME = 'Noto Sans'
  * ```
  */
 export class FontManager {
-  private _ck: FontCK | null = null
   private _fontProvider: TypefaceFontProvider | null = null
   private _loadedFonts = new Map<string, ArrayBuffer>()
   private _pendingLoads: Promise<void>[] = []
@@ -53,7 +52,6 @@ export class FontManager {
 
   /** @internal — called by Stage with the CanvasKit instance. */
   init(ck: unknown): void {
-    this._ck = ck as FontCK
     this._fontProvider = (ck as FontCK).TypefaceFontProvider.Make()
     // Kick off default font load immediately
     this._loadDefaultFont()

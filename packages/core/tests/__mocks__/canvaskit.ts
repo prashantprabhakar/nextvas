@@ -75,10 +75,30 @@ export function createMockParagraph(height = 20) {
   }
 }
 
+const REQUIRED_TEXT_STYLE_FIELDS = [
+  'color', 'decoration', 'decorationColor', 'decorationThickness', 'decorationStyle',
+  'fontFamilies', 'fontSize', 'fontStyle', 'foregroundColor', 'backgroundColor',
+  'heightMultiplier', 'halfLeading', 'letterSpacing', 'locale', 'shadows',
+  'fontFeatures', 'fontVariations', 'textBaseline', 'wordSpacing',
+]
+
 export function createMockParagraphBuilder() {
   const para = createMockParagraph()
   return {
-    pushStyle: () => {},
+    pushStyle: (style: Record<string, unknown>) => {
+      for (const field of REQUIRED_TEXT_STYLE_FIELDS) {
+        if (!(field in style)) {
+          throw new TypeError(`Missing field: "${field}"`)
+        }
+      }
+      // Validate nested fontStyle fields
+      const fs = style['fontStyle'] as Record<string, unknown> | undefined
+      if (fs) {
+        for (const field of ['weight', 'width', 'slant']) {
+          if (!(field in fs)) throw new TypeError(`Missing field: "${field}"`)
+        }
+      }
+    },
     addText: () => {},
     build: () => para,
     delete: () => {},
@@ -111,17 +131,14 @@ export function createMockCK() {
     },
     TextAlign: { Left: 'Left', Center: 'Center', Right: 'Right' },
     FontWeight: { Normal: 400, Bold: 700, 400: 400, 700: 700 },
+    FontWidth: { Normal: 5 },
     FontSlant: { Upright: 'Upright', Italic: 'Italic' },
-    ParagraphStyle: (_opts: unknown) => ({}),
-    TextStyle: () => ({
-      color: new Float32Array([0, 0, 0, 1]),
-      fontFamilies: [] as string[],
-      fontSize: 16,
-      fontStyle: { weight: 400, slant: 'Upright' },
-      heightMultiplier: 1.2,
-    }),
+    TextBaseline: { Alphabetic: 'Alphabetic', Ideographic: 'Ideographic' },
+    DecorationStyle: { Solid: 'Solid', Double: 'Double', Dotted: 'Dotted', Dashed: 'Dashed', Wavy: 'Wavy' },
+    ParagraphStyle: (opts: Record<string, unknown>) => opts,
     ParagraphBuilder: {
-      Make: () => createMockParagraphBuilder(),
+      Make: () => { throw new Error('Use MakeFromFontProvider instead of Make') },
+      MakeFromFontProvider: (_style: unknown, _provider: unknown) => createMockParagraphBuilder(),
     },
     TypefaceFontProvider: {
       Make: () => ({

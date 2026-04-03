@@ -191,6 +191,10 @@ export class Stage implements StageInterface {
     this._events.off(event, handler)
   }
 
+  emit<K extends keyof StageEventMap>(event: K, data: StageEventMap[K]): void {
+    this._events.emitStage(event, data)
+  }
+
   addRenderPass(pass: RenderPass): void {
     this._renderPasses.push(pass)
     this._renderPasses.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -208,6 +212,43 @@ export class Stage implements StageInterface {
       .map((o) => o.getWorldBoundingBox())
     if (boxes.length === 0) return new BoundingBox(0, 0, 0, 0)
     return boxes.reduce((acc, box) => acc.union(box))
+  }
+
+  // ---------------------------------------------------------------------------
+  // Resize
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Notify the stage that the canvas has been resized.
+   * Pass the new physical pixel dimensions (canvas.width / canvas.height).
+   * The stage recreates the WebGL surface and updates the viewport.
+   *
+   * @example
+   * ```ts
+   * window.addEventListener('resize', () => {
+   *   canvas.width = Math.floor(canvas.offsetWidth * devicePixelRatio)
+   *   canvas.height = Math.floor(canvas.offsetHeight * devicePixelRatio)
+   *   stage.resize(canvas.width, canvas.height)
+   * })
+   * ```
+   */
+  resize(physicalWidth: number, physicalHeight: number): void {
+    if (this._destroyed) return
+    // Update viewport in CSS pixels
+    this.viewport.setSize(physicalWidth / this._pixelRatio, physicalHeight / this._pixelRatio)
+    // Recreate the CanvasKit surface — it is invalidated when canvas dimensions change
+    if (this._surface) {
+      this._surface.dispose()
+      this._surface = null
+    }
+    const ck = this.canvasKit as MinimalCK
+    const surface = ck.MakeWebGLCanvasSurface(this.canvas, ck.ColorSpace.SRGB)
+    if (surface) {
+      this._surface = surface
+    } else {
+      console.error('[nexvas] Stage.resize(): failed to recreate WebGL surface after resize')
+    }
+    this.markDirty()
   }
 
   // ---------------------------------------------------------------------------
@@ -235,8 +276,11 @@ export class Stage implements StageInterface {
     // Clear to transparent
     skCanvas.clear(ck.Color4f(0, 0, 0, 0))
 
-    // Apply viewport transform (pan + zoom)
+    // Apply DPR scaling first so the entire scene is in CSS-pixel space.
+    // EventSystem converts DOM events using CSS pixels, so all world coordinates
+    // are CSS-pixel based. Scaling by pixelRatio maps CSS→physical pixels correctly.
     skCanvas.save()
+    skCanvas.scale(this._pixelRatio, this._pixelRatio)
     skCanvas.translate(vp.x, vp.y)
     skCanvas.scale(vp.scale, vp.scale)
 

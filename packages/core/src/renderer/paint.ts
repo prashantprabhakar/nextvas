@@ -114,17 +114,17 @@ export function makeStrokePaint(ck: PaintCK, stroke: StrokeStyle, opacity: numbe
   paint.setColor(colorToCK(ck, stroke.color))
   paint.setStrokeWidth(stroke.width)
 
-  if (stroke.lineCap === 'round') {
+  if (stroke.cap === 'round') {
     paint.setStrokeCap(ck.StrokeCap.Round)
-  } else if (stroke.lineCap === 'square') {
+  } else if (stroke.cap === 'square') {
     paint.setStrokeCap(ck.StrokeCap.Square)
   } else {
     paint.setStrokeCap(ck.StrokeCap.Butt)
   }
 
-  if (stroke.lineJoin === 'round') {
+  if (stroke.join === 'round') {
     paint.setStrokeJoin(ck.StrokeJoin.Round)
-  } else if (stroke.lineJoin === 'bevel') {
+  } else if (stroke.join === 'bevel') {
     paint.setStrokeJoin(ck.StrokeJoin.Bevel)
   } else {
     paint.setStrokeJoin(ck.StrokeJoin.Miter)

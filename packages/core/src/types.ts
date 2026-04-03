@@ -1,5 +1,7 @@
 import type { BoundingBox } from './math/BoundingBox.js'
 import type { Layer } from './Layer.js'
+import type { Viewport } from './Viewport.js'
+import type { FontManager } from './FontManager.js'
 
 // ---------------------------------------------------------------------------
 // Serialization
@@ -54,7 +56,7 @@ export interface RenderContext {
   /** CanvasKit instance — used to create Paints, Paths, etc. inside render(). */
   canvasKit: unknown
   /** FontManager for loading and retrieving typefaces for Text rendering. */
-  fontManager: unknown
+  fontManager: FontManager | null
   /** Device pixel ratio for HiDPI rendering. */
   pixelRatio: number
   /** Current viewport state. */
@@ -120,6 +122,11 @@ export interface StageEventMap extends ObjectEventMap {
   'object:added': { object: unknown }
   /** Fired when an object is removed from any layer. */
   'object:removed': { object: unknown }
+  // Plugin events — emitted by official plugins via stage.emit()
+  /** Fired by SelectionPlugin when the selection changes. */
+  'selection:change': { selected: unknown[] }
+  /** Fired by HistoryPlugin when the undo/redo stack changes. */
+  'history:change': { canUndo: boolean; canRedo: boolean }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,8 +180,8 @@ export type StrokeLineJoin = 'miter' | 'round' | 'bevel'
 export interface StrokeStyle {
   color: ColorRGBA
   width: number
-  lineCap?: StrokeLineCap
-  lineJoin?: StrokeLineJoin
+  cap?: StrokeLineCap
+  join?: StrokeLineJoin
   dash?: number[]
   dashOffset?: number
 }
@@ -188,14 +195,19 @@ export interface StageInterface {
   readonly id: string
   readonly canvasKit: unknown
   readonly layers: readonly Layer[]
+  readonly viewport: Viewport
+  readonly fonts: FontManager
   on<K extends keyof StageEventMap>(event: K, handler: (e: StageEventMap[K]) => void): void
   off<K extends keyof StageEventMap>(event: K, handler: (e: StageEventMap[K]) => void): void
+  /** Emit a stage event. Used by plugins to fire events on the stage. */
+  emit<K extends keyof StageEventMap>(event: K, data: StageEventMap[K]): void
   addRenderPass(pass: RenderPass): void
   removeRenderPass(pass: RenderPass): void
   getBoundingBox(): BoundingBox
   render(): void
   /** Mark the stage as needing a redraw. Call after mutating objects programmatically. */
   markDirty(): void
+  resize(physicalWidth: number, physicalHeight: number): void
 }
 
 // ---------------------------------------------------------------------------

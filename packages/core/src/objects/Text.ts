@@ -1,7 +1,6 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { colorToCK, type PaintCK } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
-import type { FontManager } from '../FontManager.js'
 
 export type TextAlign = 'left' | 'center' | 'right'
 export type TextBaseline = 'top' | 'middle' | 'bottom'
@@ -27,8 +26,35 @@ interface SkParagraph {
   delete(): void
 }
 
+/**
+ * All fields required by CanvasKit's TextStyle at runtime.
+ * CanvasKit validates this struct strictly — missing any field throws at runtime.
+ * Typed explicitly here so TypeScript catches omissions at compile time.
+ */
+interface SkTextStyle {
+  color: Float32Array
+  decoration: number
+  decorationColor: Float32Array
+  decorationThickness: number
+  decorationStyle: unknown
+  fontFamilies: string[]
+  fontSize: number
+  fontStyle: { weight: unknown; width: unknown; slant: unknown }
+  foregroundColor: Float32Array
+  backgroundColor: Float32Array
+  heightMultiplier: number
+  halfLeading: boolean
+  letterSpacing: number
+  locale: string
+  shadows: unknown[]
+  fontFeatures: unknown[]
+  fontVariations: unknown[]
+  textBaseline: unknown
+  wordSpacing: number
+}
+
 interface SkParagraphBuilder {
-  pushStyle(style: unknown): void
+  pushStyle(style: SkTextStyle): void
   addText(text: string): void
   build(): SkParagraph
   delete(): void
@@ -44,19 +70,16 @@ interface SkCanvas {
 
 interface TextCK extends PaintCK {
   ParagraphStyle(opts: { textAlign?: unknown; textStyle?: unknown; strutStyle?: unknown }): unknown
-  TextStyle(): {
-    color: Float32Array
-    fontFamilies: string[]
-    fontSize: number
-    fontStyle: { weight: unknown; slant: unknown }
-    heightMultiplier: number
-  }
   ParagraphBuilder: {
     Make(style: unknown, fontManager: unknown): SkParagraphBuilder
+    MakeFromFontProvider(style: unknown, fontProvider: unknown): SkParagraphBuilder
   }
   TextAlign: { Left: unknown; Center: unknown; Right: unknown }
   FontWeight: { Normal: unknown; Bold: unknown; [key: number]: unknown }
+  FontWidth: { Normal: unknown }
   FontSlant: { Upright: unknown; Italic: unknown }
+  TextBaseline: { Alphabetic: unknown; Ideographic: unknown }
+  DecorationStyle: { Solid: unknown }
 }
 
 /** Single or multi-line text object. Rendered via CanvasKit's paragraph API for proper shaping. */
@@ -105,21 +128,37 @@ export class Text extends BaseObject {
           ? ck.TextAlign.Right
           : ck.TextAlign.Left
 
-    const paraStyle = ck.ParagraphStyle({ textAlign: ckAlign })
+    const paraStyle = ck.ParagraphStyle({ textAlign: ckAlign, textStyle: { color: ck.Color4f(0, 0, 0, 1) } })
 
-    const textStyle = ck.TextStyle()
-    textStyle.color = this.fill
-      ? colorToCK(ck, this.fill.type === 'solid' ? this.fill.color : { r: 0, g: 0, b: 0, a: 1 })
-      : ck.Color4f(0, 0, 0, 1)
-    textStyle.fontFamilies = [this.fontFamily, 'Noto Sans']
-    textStyle.fontSize = this.fontSize
-    textStyle.fontStyle = {
-      weight: ck.FontWeight[this.fontWeight] ?? ck.FontWeight.Normal,
-      slant: this.fontStyle === 'italic' ? ck.FontSlant.Italic : ck.FontSlant.Upright,
+    const textStyle = {
+      color: this.fill
+        ? colorToCK(ck, this.fill.type === 'solid' ? this.fill.color : { r: 0, g: 0, b: 0, a: 1 })
+        : ck.Color4f(0, 0, 0, 1),
+      decoration: 0,
+      decorationColor: ck.Color4f(0, 0, 0, 1),
+      decorationThickness: 0,
+      decorationStyle: ck.DecorationStyle.Solid,
+      fontFamilies: [this.fontFamily, 'Noto Sans'],
+      fontSize: this.fontSize,
+      fontStyle: {
+        weight: ck.FontWeight[this.fontWeight] ?? ck.FontWeight.Normal,
+        width: ck.FontWidth.Normal,
+        slant: this.fontStyle === 'italic' ? ck.FontSlant.Italic : ck.FontSlant.Upright,
+      },
+      foregroundColor: ck.Color4f(0, 0, 0, 0),
+      backgroundColor: ck.Color4f(0, 0, 0, 0),
+      heightMultiplier: this.lineHeight,
+      halfLeading: false,
+      letterSpacing: 0,
+      locale: '',
+      shadows: [],
+      fontFeatures: [],
+      fontVariations: [],
+      textBaseline: ck.TextBaseline.Alphabetic,
+      wordSpacing: 0,
     }
-    textStyle.heightMultiplier = this.lineHeight
 
-    const builder = ck.ParagraphBuilder.Make(paraStyle, fontMgr)
+    const builder = ck.ParagraphBuilder.MakeFromFontProvider(paraStyle, fontMgr)
     builder.pushStyle(textStyle)
     builder.addText(this.text)
     const para = builder.build()
@@ -132,7 +171,9 @@ export class Text extends BaseObject {
 
     const ck = ctx.canvasKit as TextCK
     const canvas = ctx.skCanvas as SkCanvas
-    const fontMgr = ctx.fontManager as FontManager
+    const fontMgr = ctx.fontManager
+
+    if (!fontMgr) return
 
     if (!fontMgr.hasFont(this.fontFamily) && !fontMgr.hasFont('Noto Sans')) {
       console.warn(

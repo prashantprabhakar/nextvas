@@ -1,1 +1,1 @@
-export { HistoryPlugin, type HistoryPluginOptions } from './HistoryPlugin.js'
+export { HistoryPlugin, type HistoryPluginOptions, type HistoryPluginAPI } from './HistoryPlugin.js'

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GridPlugin } from '../src/GridPlugin.js'
-import type { StageInterface, RenderContext, RenderPass } from '@nexvas/core'
+import type { StageInterface, RenderContext, RenderPass, Viewport, FontManager } from '@nexvas/core'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,8 +31,12 @@ function makeMockCK() {
     setPathEffect: vi.fn(),
     delete: vi.fn(),
   }
+  // Paint must be a class — CanvasKit requires `new ck.Paint()`
+  class MockPaint {
+    constructor() { Object.assign(this, paint) }
+  }
   return {
-    Paint: vi.fn(() => paint),
+    Paint: MockPaint as unknown as new () => typeof paint,
     Color4f: vi.fn((r: number, g: number, b: number, a: number) => new Float32Array([r, g, b, a])),
     PaintStyle: { Fill: 'fill', Stroke: 'stroke' },
     PathEffect: { MakeDash: vi.fn() },
@@ -56,6 +60,8 @@ function makeStage(): StageInterface {
     id: 'test',
     canvasKit: {},
     layers: [],
+    viewport: { x: 0, y: 0, scale: 1, width: 800, height: 600, getState: () => ({ x: 0, y: 0, scale: 1, width: 800, height: 600 }) } as unknown as Viewport,
+    fonts: {} as unknown as FontManager,
     on: vi.fn(),
     off: vi.fn(),
     addRenderPass(pass: RenderPass) {
@@ -68,6 +74,8 @@ function makeStage(): StageInterface {
     getBoundingBox: vi.fn(),
     render: vi.fn(),
     markDirty: vi.fn(),
+    emit: vi.fn(),
+    resize: vi.fn(),
     _passes: passes,
   } as unknown as StageInterface
   return stage

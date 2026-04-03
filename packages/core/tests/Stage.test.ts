@@ -158,6 +158,34 @@ describe('Stage', () => {
     expect(children[0]!.name).toBe('child')
   })
 
+  it('resize() updates viewport size and recreates surface', () => {
+    const { stage, ck } = makeStage()
+    const disposeSpy = vi.spyOn(ck.surface, 'dispose')
+    const makeWebGLSpy = vi.spyOn(ck, 'MakeWebGLCanvasSurface')
+
+    stage.resize(1600, 900) // physical pixels (e.g. 2× DPR on 800×450 CSS)
+
+    // Surface should be recreated
+    expect(disposeSpy).toHaveBeenCalledOnce()
+    expect(makeWebGLSpy).toHaveBeenCalledOnce()
+
+    // Viewport size should be in CSS pixels (1600/dpr, 900/dpr)
+    const dpr = window.devicePixelRatio || 1
+    expect(stage.viewport.width).toBeCloseTo(1600 / dpr)
+    expect(stage.viewport.height).toBeCloseTo(900 / dpr)
+
+    // Stage should be dirty for redraw
+    expect(stage['_dirty']).toBe(true)
+  })
+
+  it('resize() is a no-op after destroy', () => {
+    const { stage, ck } = makeStage()
+    stage.destroy()
+    const makeWebGLSpy = vi.spyOn(ck, 'MakeWebGLCanvasSurface')
+    expect(() => stage.resize(800, 600)).not.toThrow()
+    expect(makeWebGLSpy).not.toHaveBeenCalled()
+  })
+
   it('getBoundingBox returns union of all visible objects', () => {
     const { stage } = makeStage()
     const layer = stage.addLayer()

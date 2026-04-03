@@ -5,14 +5,28 @@ import type { Plugin, StageInterface, CanvasPointerEvent, BaseObject } from '@ne
 // ---------------------------------------------------------------------------
 
 export interface DragPluginOptions {
-  /** Constrain dragged objects so they stay within the stage bounding box. Default: false. */
+  /**
+   * Constrain dragged objects so they stay within the stage bounding box.
+   * Default: false. Also accepted as `clampToStage` (docs alias).
+   */
   constrainToStage?: boolean
+  /** Alias for constrainToStage. */
+  clampToStage?: boolean
   /** Called when drag begins. */
   onDragStart?: (objects: BaseObject[], e: CanvasPointerEvent) => void
   /** Called each frame during drag with world-space delta from drag origin. */
   onDrag?: (objects: BaseObject[], dx: number, dy: number, e: CanvasPointerEvent) => void
   /** Called when drag ends. */
   onDragEnd?: (objects: BaseObject[], e: CanvasPointerEvent) => void
+}
+
+/**
+ * Type augmentation for accessing DragPlugin through the stage.
+ * @example
+ * const drag = (stage as DragPluginAPI).drag
+ */
+export interface DragPluginAPI {
+  drag: DragPlugin
 }
 
 interface ActiveDrag {
@@ -33,7 +47,12 @@ export class DragPlugin implements Plugin {
   readonly version = '0.1.0'
 
   private _stage: StageInterface | null = null
-  private _options: Required<DragPluginOptions>
+  private _options: {
+    constrainToStage: boolean
+    onDragStart: NonNullable<DragPluginOptions['onDragStart']>
+    onDrag: NonNullable<DragPluginOptions['onDrag']>
+    onDragEnd: NonNullable<DragPluginOptions['onDragEnd']>
+  }
   private _drag: ActiveDrag | null = null
 
   private _onMouseDown: (e: CanvasPointerEvent) => void
@@ -42,7 +61,7 @@ export class DragPlugin implements Plugin {
 
   constructor(options: DragPluginOptions = {}) {
     this._options = {
-      constrainToStage: options.constrainToStage ?? false,
+      constrainToStage: options.constrainToStage ?? options.clampToStage ?? false,
       onDragStart: options.onDragStart ?? (() => undefined),
       onDrag: options.onDrag ?? (() => undefined),
       onDragEnd: options.onDragEnd ?? (() => undefined),
@@ -59,6 +78,7 @@ export class DragPlugin implements Plugin {
 
   install(stage: StageInterface): void {
     this._stage = stage
+    ;(stage as unknown as DragPluginAPI).drag = this
     stage.on('mousedown', this._onMouseDown)
     stage.on('mousemove', this._onMouseMove)
     stage.on('mouseup', this._onMouseUp)
@@ -102,6 +122,9 @@ export class DragPlugin implements Plugin {
 
     this._drag = { objects, startWorldX: worldX, startWorldY: worldY, initialPositions }
     this._options.onDragStart(objects, e)
+    for (const obj of objects) {
+      obj.emit('dragstart', e)
+    }
     this._stage.markDirty()
   }
 
@@ -130,12 +153,18 @@ export class DragPlugin implements Plugin {
     }
 
     this._options.onDrag(this._drag.objects, dx, dy, e)
+    for (const obj of this._drag.objects) {
+      obj.emit('drag', e)
+    }
     this._stage.markDirty()
   }
 
   private _handleMouseUp(e: CanvasPointerEvent): void {
     if (!this._drag || !this._stage) return
     this._options.onDragEnd(this._drag.objects, e)
+    for (const obj of this._drag.objects) {
+      obj.emit('dragend', e)
+    }
     this._drag = null
     this._stage.markDirty()
   }

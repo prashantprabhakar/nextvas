@@ -1,1 +1,1 @@
-export { DragPlugin, type DragPluginOptions } from './DragPlugin.js'
+export { DragPlugin, type DragPluginOptions, type DragPluginAPI } from './DragPlugin.js'

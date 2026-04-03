@@ -67,6 +67,15 @@ export interface ExportPluginOptions {
 }
 
 /**
+ * Type augmentation for accessing ExportPlugin through the stage.
+ * @example
+ * const exporter = (stage as ExportPluginAPI).export
+ */
+export interface ExportPluginAPI {
+  export: ExportPlugin
+}
+
+/**
  * ExportPlugin — export the canvas content to PNG, JPEG, WebP, or PDF.
  *
  * Uses an offscreen CanvasKit surface to render the scene at an arbitrary
@@ -86,6 +95,7 @@ export class ExportPlugin implements Plugin {
 
   install(stage: StageInterface): void {
     this._stage = stage
+    ;(stage as unknown as ExportPluginAPI).export = this
   }
 
   uninstall(_stage: StageInterface): void {

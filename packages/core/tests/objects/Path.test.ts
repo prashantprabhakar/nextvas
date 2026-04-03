@@ -51,11 +51,12 @@ describe('Path', () => {
     expect(path.hitTest(50, 50)).toBe(true)
   })
 
-  it('hitTest falls back to bounding box without skPath', () => {
+  it('hitTest returns true everywhere without skPath — sentinel box prevents culling', () => {
     const path = new Path({ x: 0, y: 0, width: 100, height: 100, d: 'M 0 0 L 100 100 Z' })
-    // No render() called, no skPath cached — falls back to bbox
+    // No render() called — getLocalBoundingBox() returns a large sentinel so
+    // culling passes never discard an unrendered path. Both points hit.
     expect(path.hitTest(50, 50)).toBe(true)
-    expect(path.hitTest(200, 200)).toBe(false)
+    expect(path.hitTest(200, 200)).toBe(true)
   })
 
   it('d setter invalidates cached path', () => {

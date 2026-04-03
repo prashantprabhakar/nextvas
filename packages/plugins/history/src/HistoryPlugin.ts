@@ -20,6 +20,15 @@ export interface HistoryPluginOptions {
 }
 
 /**
+ * Type augmentation for accessing HistoryPlugin through the stage.
+ * @example
+ * const history = (stage as HistoryPluginAPI).history
+ */
+export interface HistoryPluginAPI {
+  history: HistoryPlugin
+}
+
+/**
  * HistoryPlugin — undo/redo via the Command pattern.
  *
  * Records `HistoryCommand` objects and replays or reverses them on
@@ -47,6 +56,7 @@ export class HistoryPlugin implements Plugin {
 
   install(stage: StageInterface): void {
     this._stage = stage
+    ;(stage as unknown as HistoryPluginAPI).history = this
     if (typeof document !== 'undefined') {
       document.addEventListener('keydown', this._onKeyDown)
     }
@@ -74,38 +84,37 @@ export class HistoryPlugin implements Plugin {
       this._undoStack.shift()
     }
     this._redoStack = []
+    this._emitChange()
     this._stage?.markDirty()
   }
 
-  /**
-   * Undo the last recorded command.
-   */
+  /** Undo the last recorded command. */
   undo(): void {
     const command = this._undoStack.pop()
     if (!command) return
     command.undo()
     this._redoStack.push(command)
+    this._emitChange()
     this._stage?.markDirty()
   }
 
-  /**
-   * Redo the last undone command.
-   */
+  /** Redo the last undone command. */
   redo(): void {
     const command = this._redoStack.pop()
     if (!command) return
     command.apply()
     this._undoStack.push(command)
+    this._emitChange()
     this._stage?.markDirty()
   }
 
-  /** Returns true if there are commands that can be undone. */
-  canUndo(): boolean {
+  /** True if there are commands that can be undone. */
+  get canUndo(): boolean {
     return this._undoStack.length > 0
   }
 
-  /** Returns true if there are commands that can be redone. */
-  canRedo(): boolean {
+  /** True if there are commands that can be redone. */
+  get canRedo(): boolean {
     return this._redoStack.length > 0
   }
 
@@ -113,11 +122,16 @@ export class HistoryPlugin implements Plugin {
   clear(): void {
     this._undoStack = []
     this._redoStack = []
+    this._emitChange()
   }
 
   // ---------------------------------------------------------------------------
-  // Keyboard handler
+  // Internal
   // ---------------------------------------------------------------------------
+
+  private _emitChange(): void {
+    this._stage?.emit('history:change', { canUndo: this.canUndo, canRedo: this.canRedo })
+  }
 
   private _handleKeyDown(e: KeyboardEvent): void {
     const ctrl = e.ctrlKey || e.metaKey

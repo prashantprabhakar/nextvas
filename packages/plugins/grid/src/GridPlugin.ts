@@ -9,7 +9,7 @@ interface SkCanvas {
 }
 
 interface GridCK {
-  Paint(): SkPaint
+  Paint: new () => SkPaint  // CanvasKit structs require `new`
   Color4f(r: number, g: number, b: number, a: number): Float32Array
   PaintStyle: { Fill: unknown; Stroke: unknown }
 }
@@ -47,7 +47,6 @@ export class GridPlugin implements Plugin {
   readonly name = 'grid'
   readonly version = '0.1.0'
 
-  private _stage: StageInterface | null = null
   private _options: Required<GridPluginOptions>
   private _renderPass: RenderPass | null = null
 
@@ -66,8 +65,6 @@ export class GridPlugin implements Plugin {
   // ---------------------------------------------------------------------------
 
   install(stage: StageInterface): void {
-    this._stage = stage
-
     this._renderPass = {
       phase: 'pre',
       order: -100,
@@ -81,7 +78,6 @@ export class GridPlugin implements Plugin {
       stage.removeRenderPass(this._renderPass)
       this._renderPass = null
     }
-    this._stage = null
   }
 
   // ---------------------------------------------------------------------------
@@ -126,7 +122,7 @@ export class GridPlugin implements Plugin {
     const startX = Math.floor(worldLeft / cellSize) * cellSize
     const startY = Math.floor(worldTop / cellSize) * cellSize
 
-    const paint = ck.Paint()
+    const paint = new ck.Paint()
     paint.setColor(ck.Color4f(color.r, color.g, color.b, color.a))
     paint.setAntiAlias(true)
 

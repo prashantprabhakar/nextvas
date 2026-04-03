@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HistoryPlugin, type HistoryCommand } from '../src/HistoryPlugin.js'
-import type { StageInterface } from '@nexvas/core'
+import type { StageInterface, Viewport, FontManager } from '@nexvas/core'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -11,6 +11,8 @@ function makeStage(): StageInterface {
     id: 'test-stage',
     canvasKit: {},
     layers: [],
+    viewport: { x: 0, y: 0, scale: 1, width: 800, height: 600, getState: () => ({ x: 0, y: 0, scale: 1, width: 800, height: 600 }) } as unknown as Viewport,
+    fonts: {} as unknown as FontManager,
     on: vi.fn(),
     off: vi.fn(),
     addRenderPass: vi.fn(),
@@ -18,6 +20,8 @@ function makeStage(): StageInterface {
     getBoundingBox: vi.fn(),
     render: vi.fn(),
     markDirty: vi.fn(),
+    emit: vi.fn(),
+    resize: vi.fn(),
   } as unknown as StageInterface
 }
 
@@ -51,8 +55,8 @@ describe('HistoryPlugin', () => {
   })
 
   it('installs and uninstalls without error', () => {
-    expect(plugin.canUndo()).toBe(false)
-    expect(plugin.canRedo()).toBe(false)
+    expect(plugin.canUndo).toBe(false)
+    expect(plugin.canRedo).toBe(false)
     plugin.uninstall(stage)
   })
 
@@ -60,7 +64,7 @@ describe('HistoryPlugin', () => {
     const cmd = makeCommand()
     plugin.record(cmd)
     expect(cmd.applyCalls).toBe(1)
-    expect(plugin.canUndo()).toBe(true)
+    expect(plugin.canUndo).toBe(true)
   })
 
   it('undo calls undo on last command', () => {
@@ -68,8 +72,8 @@ describe('HistoryPlugin', () => {
     plugin.record(cmd)
     plugin.undo()
     expect(cmd.undoCalls).toBe(1)
-    expect(plugin.canUndo()).toBe(false)
-    expect(plugin.canRedo()).toBe(true)
+    expect(plugin.canUndo).toBe(false)
+    expect(plugin.canRedo).toBe(true)
   })
 
   it('redo re-applies the undone command', () => {
@@ -78,8 +82,8 @@ describe('HistoryPlugin', () => {
     plugin.undo()
     plugin.redo()
     expect(cmd.applyCalls).toBe(2)
-    expect(plugin.canRedo()).toBe(false)
-    expect(plugin.canUndo()).toBe(true)
+    expect(plugin.canRedo).toBe(false)
+    expect(plugin.canUndo).toBe(true)
   })
 
   it('record after undo clears redo stack', () => {
@@ -88,7 +92,7 @@ describe('HistoryPlugin', () => {
     plugin.record(cmd1)
     plugin.undo()
     plugin.record(cmd2)
-    expect(plugin.canRedo()).toBe(false)
+    expect(plugin.canRedo).toBe(false)
   })
 
   it('undo on empty stack does nothing', () => {
@@ -104,8 +108,8 @@ describe('HistoryPlugin', () => {
     plugin.record(makeCommand())
     plugin.undo()
     plugin.clear()
-    expect(plugin.canUndo()).toBe(false)
-    expect(plugin.canRedo()).toBe(false)
+    expect(plugin.canUndo).toBe(false)
+    expect(plugin.canRedo).toBe(false)
   })
 
   it('respects maxSize', () => {
@@ -119,7 +123,7 @@ describe('HistoryPlugin', () => {
     // Can undo twice (b, c) but not a third time
     limited.undo()
     limited.undo()
-    expect(limited.canUndo()).toBe(false)
+    expect(limited.canUndo).toBe(false)
 
     limited.uninstall(stage)
   })
@@ -169,11 +173,11 @@ describe('HistoryPlugin', () => {
 
     plugin.undo()
     plugin.undo()
-    expect(plugin.canUndo()).toBe(false)
+    expect(plugin.canUndo).toBe(false)
 
     plugin.redo()
     plugin.redo()
-    expect(plugin.canRedo()).toBe(false)
+    expect(plugin.canRedo).toBe(false)
 
     expect(cmd1.applyCalls).toBe(2)
     expect(cmd2.applyCalls).toBe(2)

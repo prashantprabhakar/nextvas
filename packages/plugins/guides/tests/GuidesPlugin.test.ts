@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { GuidesPlugin } from '../src/GuidesPlugin.js'
 import { Rect, Layer } from '@nexvas/core'
-import type { StageInterface, CanvasPointerEvent, RenderContext, RenderPass } from '@nexvas/core'
+import type { StageInterface, CanvasPointerEvent, RenderContext, RenderPass, Viewport, FontManager } from '@nexvas/core'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,6 +39,8 @@ function makeStage(layerObjects: Rect[] = []): StageInterface {
     get layers() {
       return [layer] as unknown as readonly Layer[]
     },
+    viewport: { x: 0, y: 0, scale: 1, width: 800, height: 600, getState: () => ({ x: 0, y: 0, scale: 1, width: 800, height: 600 }) } as unknown as Viewport,
+    fonts: {} as unknown as FontManager,
     on(event: string, handler: EventHandler) {
       if (!handlers.has(event)) handlers.set(event, new Set())
       handlers.get(event)!.add(handler)
@@ -56,6 +58,8 @@ function makeStage(layerObjects: Rect[] = []): StageInterface {
     getBoundingBox: vi.fn(),
     render: vi.fn(),
     markDirty: vi.fn(),
+    emit: vi.fn(),
+    resize: vi.fn(),
     _fire(event: string, data: unknown) {
       handlers.get(event)?.forEach((h) => h(data))
     },
@@ -82,8 +86,9 @@ function makeMockCK() {
     setPathEffect: vi.fn(),
     delete: vi.fn(),
   }
+  class MockPaint { constructor() { Object.assign(this, paint) } }
   return {
-    Paint: vi.fn(() => paint),
+    Paint: MockPaint as unknown as new () => typeof paint,
     Color4f: vi.fn(() => new Float32Array(4)),
     PaintStyle: { Stroke: 'stroke' },
     PathEffect: { MakeDash: vi.fn(() => 'dash-effect') },

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ExportPlugin } from '../src/ExportPlugin.js'
-import type { StageInterface, Layer, BoundingBox } from '@nexvas/core'
+import type { StageInterface, Layer, BoundingBox, Viewport, FontManager } from '@nexvas/core'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,6 +67,8 @@ function makeStage(): StageInterface & { _ck: ReturnType<typeof makeMockCK> } {
     get layers() {
       return [] as unknown as readonly Layer[]
     },
+    viewport: { x: 0, y: 0, scale: 1, width: 800, height: 600, getState: () => ({ x: 0, y: 0, scale: 1, width: 800, height: 600 }) } as unknown as Viewport,
+    fonts: {} as unknown as FontManager,
     on: vi.fn(),
     off: vi.fn(),
     addRenderPass: vi.fn(),
@@ -79,6 +81,8 @@ function makeStage(): StageInterface & { _ck: ReturnType<typeof makeMockCK> } {
     },
     render: vi.fn(),
     markDirty: vi.fn(),
+    emit: vi.fn(),
+    resize: vi.fn(),
   } as unknown as StageInterface & { _ck: typeof ck }
   return stage
 }

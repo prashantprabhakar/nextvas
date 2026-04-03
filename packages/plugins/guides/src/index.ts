@@ -1,1 +1,1 @@
-export { GuidesPlugin, type GuidesPluginOptions } from './GuidesPlugin.js'
+export { GuidesPlugin, type GuidesPluginOptions, type GuidesPluginAPI } from './GuidesPlugin.js'
