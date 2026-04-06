@@ -45,6 +45,7 @@ export class Group extends BaseObject {
     }
     this._children.push(object)
     object.parent = this
+    this._invalidateBBox()
     return this
   }
 
@@ -53,6 +54,7 @@ export class Group extends BaseObject {
     if (index === -1) return this
     this._children.splice(index, 1)
     object.parent = null
+    this._invalidateBBox()
     return this
   }
 
@@ -62,6 +64,7 @@ export class Group extends BaseObject {
       child.parent = null
     }
     this._children = []
+    this._invalidateBBox()
     return this
   }
 
@@ -80,8 +83,8 @@ export class Group extends BaseObject {
   // Transform & bounds
   // ---------------------------------------------------------------------------
 
-  /** Group's bounding box is the union of all visible children's world bounding boxes. */
-  getWorldBoundingBox(): BoundingBox {
+  /** Group's world bbox is the union of all visible children's world bounding boxes. */
+  protected override _computeWorldBoundingBox(): BoundingBox {
     if (this._children.length === 0) {
       return new BoundingBox(this.x, this.y, 0, 0)
     }
@@ -92,6 +95,28 @@ export class Group extends BaseObject {
       result = result === null ? bb : result.union(bb)
     }
     return result ?? new BoundingBox(this.x, this.y, 0, 0)
+  }
+
+  /**
+   * When this group's own transform changes, all descendant world-bbox caches go stale
+   * because they incorporate ancestor transforms. Cascade the clear downward.
+   * @internal
+   */
+  protected override _invalidateBBox(): void {
+    // Clear children first so that when super fires the Layer's index-update callback,
+    // any recomputation of this group's world bbox picks up fresh child values.
+    for (const child of this._children) {
+      child._clearBBoxCacheDeep()
+    }
+    super._invalidateBBox()
+  }
+
+  /** @internal */
+  override _clearBBoxCacheDeep(): void {
+    this._worldBBoxCache = null
+    for (const child of this._children) {
+      child._clearBBoxCacheDeep()
+    }
   }
 
   // ---------------------------------------------------------------------------
