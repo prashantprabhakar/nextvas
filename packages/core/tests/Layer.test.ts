@@ -252,6 +252,62 @@ describe('Layer', () => {
     })
   })
 
+  describe('NV-006 R-tree spatial index', () => {
+    it('finds object after it is moved to a new position', () => {
+      const layer = new Layer()
+      const rect = new Rect({ x: 0, y: 0, width: 50, height: 50 })
+      layer.add(rect)
+      rect.x = 200
+      rect.y = 200
+      expect(layer.hitTest(220, 220)).toBe(rect)
+      expect(layer.hitTest(25, 25)).toBeNull()
+    })
+
+    it('does not return object removed from layer', () => {
+      const layer = new Layer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+      layer.remove(rect)
+      expect(layer.hitTest(50, 50)).toBeNull()
+    })
+
+    it('finds correct object among many non-overlapping objects', () => {
+      const layer = new Layer()
+      const rects: Rect[] = []
+      for (let i = 0; i < 200; i++) {
+        const r = new Rect({ x: i * 60, y: 0, width: 50, height: 50 })
+        layer.add(r)
+        rects.push(r)
+      }
+      expect(layer.hitTest(rects[100]!.x + 25, 25)).toBe(rects[100])
+      expect(layer.hitTest(rects[0]!.x + 25, 25)).toBe(rects[0])
+      expect(layer.hitTest(rects[199]!.x + 25, 25)).toBe(rects[199])
+    })
+
+    it('updates index when child inside a Group moves', () => {
+      const layer = new Layer()
+      const group = new Group({ x: 0, y: 0 })
+      const child = new Rect({ x: 0, y: 0, width: 50, height: 50 })
+      group.add(child)
+      layer.add(group)
+      child.x = 300
+      // Group's R-tree entry should now cover (300,0)→(350,50)
+      expect(layer.hitTest(325, 25)).toBe(child)
+      expect(layer.hitTest(25, 25)).toBeNull()
+    })
+
+    it('updates index when Group itself moves', () => {
+      const layer = new Layer()
+      const group = new Group({ x: 0, y: 0, width: 50, height: 50 })
+      const child = new Rect({ x: 0, y: 0, width: 50, height: 50 })
+      group.add(child)
+      layer.add(group)
+      group.x = 400
+      expect(layer.hitTest(425, 25)).toBe(child)
+      expect(layer.hitTest(25, 25)).toBeNull()
+    })
+  })
+
   describe('NV-035 per-object hitTolerance', () => {
     it('uses object hitTolerance for hit testing', () => {
       const layer = new Layer()

@@ -36,5 +36,8 @@
     "vite": "^8.0.1",
     "vite-plugin-dts": "^4.0.0",
     "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "rbush": "^4.0.1"
   }
 }

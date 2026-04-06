@@ -1,8 +1,20 @@
+import RBush from 'rbush'
 import type { BaseObject } from './objects/BaseObject.js'
 import { Group } from './objects/Group.js'
 import { objectFromJSON } from './objects/objectFromJSON.js'
 import { BoundingBox } from './math/BoundingBox.js'
 import type { RenderContext, LayerJSON } from './types.js'
+
+interface RBushItem {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+  obj: BaseObject
+}
+
+/** Expand R-tree query box by this many world units to cover any object's hitTolerance. */
+const HIT_QUERY_EXPANSION = 32
 
 /**
  * A named grouping within the Stage. Layers control render order.
@@ -17,6 +29,8 @@ export class Layer {
 
   private _objects: BaseObject[] = []
   private _onObjectMutation: ((type: 'added' | 'removed', obj: BaseObject) => void) | null = null
+  private _index = new RBush<RBushItem>()
+  private _indexItems = new Map<BaseObject, RBushItem>()
 
   constructor(options: { id?: string; name?: string; visible?: boolean; locked?: boolean } = {}) {
     this.id = options.id ?? `layer_${Date.now().toString(36)}`
@@ -49,6 +63,7 @@ export class Layer {
       throw new Error(`Object "${object.id}" already has a parent. Remove it first.`)
     }
     this._objects.push(object)
+    this._indexInsert(object)
     this._onObjectMutation?.('added', object)
     return this
   }
@@ -57,6 +72,7 @@ export class Layer {
     const index = this._objects.indexOf(object)
     if (index === -1) return this
     this._objects.splice(index, 1)
+    this._indexRemove(object)
     object.parent = null
     this._onObjectMutation?.('removed', object)
     return this
@@ -64,6 +80,7 @@ export class Layer {
 
   clear(): this {
     for (const obj of this._objects) {
+      this._indexRemove(obj)
       obj.destroy()
       this._onObjectMutation?.('removed', obj)
     }
@@ -83,6 +100,7 @@ export class Layer {
       )
     }
     this._objects.splice(index, 1)
+    this._indexRemove(object)
     object.parent = null
     this._onObjectMutation?.('removed', object)
     return this
@@ -139,11 +157,29 @@ export class Layer {
   // Hit testing
   // ---------------------------------------------------------------------------
 
-  /** Returns the topmost object at the given world-space point, or null. */
+  /**
+   * Returns the topmost object at the given world-space point, or null.
+   * Uses an R-tree spatial index to prune candidates to O(log n + k) before
+   * doing precise per-object hit tests.
+   */
   hitTest(worldX: number, worldY: number, tolerance = 4): BaseObject | null {
     if (!this.visible || this.locked) return null
+
+    const candidates = this._index.search({
+      minX: worldX - HIT_QUERY_EXPANSION,
+      minY: worldY - HIT_QUERY_EXPANSION,
+      maxX: worldX + HIT_QUERY_EXPANSION,
+      maxY: worldY + HIT_QUERY_EXPANSION,
+    })
+
+    if (candidates.length === 0) return null
+
+    const candidateSet = new Set<BaseObject>(candidates.map((c) => c.obj))
+
+    // Walk in reverse z-order (topmost first) and test only candidates.
     for (let i = this._objects.length - 1; i >= 0; i--) {
       const obj = this._objects[i]!
+      if (!candidateSet.has(obj)) continue
       if (obj instanceof Group) {
         const hit = obj.hitTestChild(worldX, worldY, tolerance)
         if (hit !== null) return hit
@@ -152,6 +188,36 @@ export class Layer {
       }
     }
     return null
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spatial index management
+  // ---------------------------------------------------------------------------
+
+  private _indexInsert(obj: BaseObject): void {
+    const bb = obj.getWorldBoundingBox()
+    const item: RBushItem = { minX: bb.left, minY: bb.top, maxX: bb.right, maxY: bb.bottom, obj }
+    this._index.insert(item)
+    this._indexItems.set(obj, item)
+    obj._setBBoxChangeCallback(() => this._indexUpdate(obj))
+  }
+
+  private _indexUpdate(obj: BaseObject): void {
+    const old = this._indexItems.get(obj)
+    if (old === undefined) return
+    this._index.remove(old)
+    const bb = obj.getWorldBoundingBox()
+    const item: RBushItem = { minX: bb.left, minY: bb.top, maxX: bb.right, maxY: bb.bottom, obj }
+    this._index.insert(item)
+    this._indexItems.set(obj, item)
+  }
+
+  private _indexRemove(obj: BaseObject): void {
+    const item = this._indexItems.get(obj)
+    if (item === undefined) return
+    this._index.remove(item)
+    this._indexItems.delete(obj)
+    obj._setBBoxChangeCallback(null)
   }
 
   // ---------------------------------------------------------------------------

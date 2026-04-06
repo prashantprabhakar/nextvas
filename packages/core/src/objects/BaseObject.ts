@@ -47,15 +47,37 @@ export abstract class BaseObject {
   readonly id: string
   name: string
 
-  x: number
-  y: number
-  width: number
-  height: number
-  rotation: number
-  scaleX: number
-  scaleY: number
-  skewX: number
-  skewY: number
+  // Spatial properties use getters/setters so mutations invalidate the bbox cache
+  // and notify the Layer's spatial index. Backing fields are private.
+  private _x: number = 0
+  private _y: number = 0
+  private _width: number = 0
+  private _height: number = 0
+  private _rotation: number = 0
+  private _scaleX: number = 1
+  private _scaleY: number = 1
+  private _skewX: number = 0
+  private _skewY: number = 0
+
+  get x(): number { return this._x }
+  set x(v: number) { this._x = v; this._invalidateBBox() }
+  get y(): number { return this._y }
+  set y(v: number) { this._y = v; this._invalidateBBox() }
+  get width(): number { return this._width }
+  set width(v: number) { this._width = v; this._invalidateBBox() }
+  get height(): number { return this._height }
+  set height(v: number) { this._height = v; this._invalidateBBox() }
+  get rotation(): number { return this._rotation }
+  set rotation(v: number) { this._rotation = v; this._invalidateBBox() }
+  get scaleX(): number { return this._scaleX }
+  set scaleX(v: number) { this._scaleX = v; this._invalidateBBox() }
+  get scaleY(): number { return this._scaleY }
+  set scaleY(v: number) { this._scaleY = v; this._invalidateBBox() }
+  get skewX(): number { return this._skewX }
+  set skewX(v: number) { this._skewX = v; this._invalidateBBox() }
+  get skewY(): number { return this._skewY }
+  set skewY(v: number) { this._skewY = v; this._invalidateBBox() }
+
   opacity: number
   visible: boolean
   locked: boolean
@@ -71,20 +93,27 @@ export abstract class BaseObject {
   /** Reference to the parent Group, set by Group.add(). */
   parent: BaseObject | null = null
 
+  /** @internal Cached world-space AABB. Cleared on any spatial mutation. */
+  _worldBBoxCache: BoundingBox | null = null
+  /** @internal Set by Layer to receive notifications when this object's bbox changes. */
+  private _onBBoxChange: (() => void) | null = null
+
   private _eventHandlers = new Map<string, Set<EventHandler<unknown>>>()
 
   constructor(props: BaseObjectProps = {}) {
     this.id = props.id ?? generateId()
     this.name = props.name ?? ''
-    this.x = props.x ?? 0
-    this.y = props.y ?? 0
-    this.width = props.width ?? 0
-    this.height = props.height ?? 0
-    this.rotation = props.rotation ?? 0
-    this.scaleX = props.scaleX ?? 1
-    this.scaleY = props.scaleY ?? 1
-    this.skewX = props.skewX ?? 0
-    this.skewY = props.skewY ?? 0
+    // Set backing fields directly in constructor to avoid spurious invalidation callbacks
+    // before the object is added to any layer.
+    this._x = props.x ?? 0
+    this._y = props.y ?? 0
+    this._width = props.width ?? 0
+    this._height = props.height ?? 0
+    this._rotation = props.rotation ?? 0
+    this._scaleX = props.scaleX ?? 1
+    this._scaleY = props.scaleY ?? 1
+    this._skewX = props.skewX ?? 0
+    this._skewY = props.skewY ?? 0
     this.opacity = props.opacity ?? 1
     this.visible = props.visible ?? true
     this.locked = props.locked ?? false
@@ -128,11 +157,47 @@ export abstract class BaseObject {
   }
 
   /**
-   * Axis-aligned bounding box in world space.
+   * Axis-aligned bounding box in world space. Result is cached; cleared on any spatial mutation.
    * Accounts for all ancestor transforms.
    */
   getWorldBoundingBox(): BoundingBox {
+    if (this._worldBBoxCache !== null) return this._worldBBoxCache
+    this._worldBBoxCache = this._computeWorldBoundingBox()
+    return this._worldBBoxCache
+  }
+
+  /** Override in subclasses (e.g. Group) to change how the world bbox is computed. */
+  protected _computeWorldBoundingBox(): BoundingBox {
     return this.getLocalBoundingBox().transform(this.getWorldTransform())
+  }
+
+  /**
+   * Clears the cached world bbox, notifies the Layer's spatial index, and propagates
+   * up the parent chain so ancestor Group entries are also refreshed.
+   * @internal
+   */
+  protected _invalidateBBox(): void {
+    this._worldBBoxCache = null
+    this._onBBoxChange?.()
+    this.parent?._invalidateBBox()
+  }
+
+  /**
+   * Recursively clears world bbox caches without firing callbacks.
+   * Called when an ancestor's transform changes and all descendant caches go stale.
+   * @internal
+   */
+  _clearBBoxCacheDeep(): void {
+    this._worldBBoxCache = null
+  }
+
+  /**
+   * Register a callback invoked when this object's world bbox is invalidated.
+   * Used internally by Layer to keep the spatial index in sync.
+   * @internal
+   */
+  _setBBoxChangeCallback(fn: (() => void) | null): void {
+    this._onBBoxChange = fn
   }
 
   // ---------------------------------------------------------------------------
