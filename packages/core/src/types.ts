@@ -11,6 +11,42 @@ import type { BaseObject } from './objects/BaseObject.js'
 export type ObjectDeserializer = (json: ObjectJSON) => BaseObject
 
 // ---------------------------------------------------------------------------
+// Minimal CanvasKit typing (NV-015)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal interface covering the CanvasKit surface used by core and official
+ * plugins.  Avoids forcing every consumer to cast from `unknown`.
+ *
+ * The index signature allows access to any deeper API without additional casts,
+ * so plugins that use niche CanvasKit features can still call them directly.
+ */
+export interface CanvasKitLike {
+  // Construction
+  Paint: new () => { setColor(c: Float32Array): void; setStyle(s: unknown): void; setStrokeWidth(w: number): void; setAntiAlias(aa: boolean): void; delete(): void; [k: string]: unknown }
+  Color4f(r: number, g: number, b: number, a: number): Float32Array
+  LTRBRect(l: number, t: number, r: number, b: number): Float32Array
+
+  // Enums
+  PaintStyle: { Fill: unknown; Stroke: unknown }
+  StrokeCap?: { Butt: unknown; Round: unknown; Square: unknown }
+  StrokeJoin?: { Miter: unknown; Round: unknown; Bevel: unknown }
+  TileMode?: { Clamp: unknown; [k: string]: unknown }
+  ColorSpace?: { SRGB: unknown; [k: string]: unknown }
+
+  // Factories
+  Shader?: { MakeLinearGradient(start: number[], end: number[], colors: Float32Array[], positions: number[] | null, mode: unknown): unknown }
+  PathEffect?: { MakeDash(intervals: number[], phase?: number): unknown; [k: string]: unknown }
+
+  // Surface / canvas
+  MakeWebGLCanvasSurface?(canvas: HTMLCanvasElement, colorSpace?: unknown, opts?: unknown): unknown
+  MakeImageFromEncoded?(data: Uint8Array): unknown
+
+  // Allow arbitrary access for niche or newer APIs
+  [key: string]: unknown
+}
+
+// ---------------------------------------------------------------------------
 // Serialization
 // ---------------------------------------------------------------------------
 
@@ -61,7 +97,7 @@ export interface RenderContext {
   /** CanvasKit SkCanvas instance — cast to SkCanvas inside render() implementations. */
   skCanvas: unknown
   /** CanvasKit instance — used to create Paints, Paths, etc. inside render(). */
-  canvasKit: unknown
+  canvasKit: CanvasKitLike
   /** FontManager for loading and retrieving typefaces for Text rendering. */
   fontManager: FontManager | null
   /** Device pixel ratio for HiDPI rendering. */
@@ -215,7 +251,7 @@ export interface StrokeStyle {
 /** Minimal interface that plugins interact with. Full Stage extends this. */
 export interface StageInterface {
   readonly id: string
-  readonly canvasKit: unknown
+  readonly canvasKit: CanvasKitLike
   readonly layers: readonly Layer[]
   readonly viewport: Viewport
   readonly fonts: FontManager
