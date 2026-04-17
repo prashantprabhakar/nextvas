@@ -39,6 +39,7 @@ export { Vec2, Matrix3x3, BoundingBox } from './math/index.js'
 
 // Types
 export type {
+  CanvasKitLike,
   Plugin,
   RenderContext,
   RenderPass,

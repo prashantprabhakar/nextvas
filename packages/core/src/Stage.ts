@@ -6,6 +6,7 @@ import { FontManager } from './FontManager.js'
 import { BoundingBox } from './math/BoundingBox.js'
 import type { ViewportOptions } from './Viewport.js'
 import type {
+  CanvasKitLike,
   Plugin,
   RenderContext,
   RenderPass,
@@ -52,7 +53,7 @@ export interface StageOptions {
   /**
    * CanvasKit instance — result of `loadCanvasKit()` from @nexvas/renderer.
    */
-  canvasKit: unknown
+  canvasKit: CanvasKitLike
   viewport?: ViewportOptions
   /**
    * Device pixel ratio. Defaults to window.devicePixelRatio.
@@ -76,7 +77,7 @@ export interface StageOptions {
 export class Stage implements StageInterface {
   readonly id: string
   readonly canvas: HTMLCanvasElement
-  readonly canvasKit: unknown
+  readonly canvasKit: CanvasKitLike
   readonly viewport: Viewport
   readonly plugins: PluginRegistry
   readonly fonts: FontManager

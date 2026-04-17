@@ -64,6 +64,7 @@ export abstract class BaseObject {
     const oldValue = this._x
     this._x = v
     if (oldValue !== v) this._mutationHandler?.('x', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get y(): number { return this._y }
@@ -71,6 +72,7 @@ export abstract class BaseObject {
     const oldValue = this._y
     this._y = v
     if (oldValue !== v) this._mutationHandler?.('y', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get width(): number { return this._width }
@@ -92,6 +94,7 @@ export abstract class BaseObject {
     const oldValue = this._rotation
     this._rotation = v
     if (oldValue !== v) this._mutationHandler?.('rotation', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get scaleX(): number { return this._scaleX }
@@ -99,6 +102,7 @@ export abstract class BaseObject {
     const oldValue = this._scaleX
     this._scaleX = v
     if (oldValue !== v) this._mutationHandler?.('scaleX', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get scaleY(): number { return this._scaleY }
@@ -106,6 +110,7 @@ export abstract class BaseObject {
     const oldValue = this._scaleY
     this._scaleY = v
     if (oldValue !== v) this._mutationHandler?.('scaleY', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get skewX(): number { return this._skewX }
@@ -113,6 +118,7 @@ export abstract class BaseObject {
     const oldValue = this._skewX
     this._skewX = v
     if (oldValue !== v) this._mutationHandler?.('skewX', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
   get skewY(): number { return this._skewY }
@@ -120,6 +126,7 @@ export abstract class BaseObject {
     const oldValue = this._skewY
     this._skewY = v
     if (oldValue !== v) this._mutationHandler?.('skewY', oldValue, v)
+    this._localTransformCache = null
     this._invalidateBBox()
   }
 
@@ -138,6 +145,8 @@ export abstract class BaseObject {
   /** Reference to the parent Group, set by Group.add(). */
   parent: BaseObject | null = null
 
+  /** @internal Cached local transform matrix. Cleared on any spatial mutation. */
+  _localTransformCache: Matrix3x3 | null = null
   /** @internal Cached world-space AABB. Cleared on any spatial mutation. */
   _worldBBoxCache: BoundingBox | null = null
   /** @internal Set by Layer to receive notifications when this object's bbox changes. */
@@ -180,10 +189,12 @@ export abstract class BaseObject {
    * Computed from this object's own properties only.
    */
   getLocalTransform(): Matrix3x3 {
+    if (this._localTransformCache !== null) return this._localTransformCache
     const rotRad = (this.rotation * Math.PI) / 180
-    return Matrix3x3.translation(this.x, this.y)
+    this._localTransformCache = Matrix3x3.translation(this.x, this.y)
       .multiply(Matrix3x3.rotation(rotRad))
       .multiply(Matrix3x3.scale(this.scaleX, this.scaleY))
+    return this._localTransformCache
   }
 
   /**
