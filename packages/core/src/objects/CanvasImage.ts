@@ -1,7 +1,7 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { BoundingBox } from '../math/BoundingBox.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
-import type { PaintCK } from '../renderer/paint.js'
+import type { PaintCK, SkPaint } from '../renderer/paint.js'
 
 interface SkImage {
   width(): number
@@ -12,7 +12,7 @@ interface SkImage {
 interface SkCanvas {
   save(): number
   restore(): void
-  concat(matrix: number[]): void
+  concat(matrix: ArrayLike<number>): void
   drawImageRect(
     img: SkImage,
     src: number[],
@@ -212,7 +212,7 @@ export class CanvasImage extends BaseObject {
 
   render(ctx: RenderContext): void {
     if (!this.visible || !ctx.skCanvas || !this.src) return
-    const ck = ctx.canvasKit as ImageCK
+    const ck = ctx.canvasKit as unknown as ImageCK
     const canvas = ctx.skCanvas as SkCanvas
 
     // If not loaded, kick off the load and skip this frame
@@ -222,15 +222,19 @@ export class CanvasImage extends BaseObject {
     }
 
     canvas.save()
-    canvas.concat(Array.from(this.getLocalTransform().values))
+    canvas.concat(this.getLocalTransform().values)
 
     const { src, dst } = this._computeRects(this._skImage.width(), this._skImage.height())
 
-    const paint = new ck.Paint()
-    paint.setAntiAlias(true)
-    paint.setAlphaf(this.opacity)
-    canvas.drawImageRect(this._skImage, src, dst, paint)
-    paint.delete()
+    const imgKey = `img:${this.opacity}`
+    if (this._fillPaintCache?.key !== imgKey) {
+      ;(this._fillPaintCache?.paint as SkPaint | undefined)?.delete()
+      const p = new ck.Paint()
+      p.setAntiAlias(true)
+      p.setAlphaf(this.opacity)
+      this._fillPaintCache = { paint: p, key: imgKey }
+    }
+    canvas.drawImageRect(this._skImage, src, dst, this._fillPaintCache!.paint as SkPaint)
 
     canvas.restore()
   }

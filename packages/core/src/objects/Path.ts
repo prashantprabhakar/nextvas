@@ -1,6 +1,6 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { BoundingBox } from '../math/BoundingBox.js'
-import { makeFillPaint, makeStrokePaint, type PaintCK } from '../renderer/paint.js'
+import { makeFillPaint, makeStrokePaint, fillCacheKey, strokeCacheKey, type PaintCK, type SkPaint } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
 
 interface SkPath {
@@ -12,7 +12,7 @@ interface SkPath {
 interface SkCanvas {
   save(): number
   restore(): void
-  concat(matrix: number[]): void
+  concat(matrix: ArrayLike<number>): void
   drawPath(path: SkPath, paint: unknown): void
 }
 
@@ -107,25 +107,37 @@ export class Path extends BaseObject {
 
   render(ctx: RenderContext): void {
     if (!this.visible || !ctx.skCanvas || !this._d) return
-    const ck = ctx.canvasKit as PathCK
+    const ck = ctx.canvasKit as unknown as PathCK
     const canvas = ctx.skCanvas as SkCanvas
 
     const skPath = this._ensurePath(ck)
     if (!skPath) return
 
     canvas.save()
-    canvas.concat(Array.from(this.getLocalTransform().values))
+    canvas.concat(this.getLocalTransform().values)
 
     if (this.fill) {
-      const paint = makeFillPaint(ck, this.fill, this.opacity)
-      canvas.drawPath(skPath, paint)
-      paint.delete()
+      const key = fillCacheKey(this.fill, this.opacity)
+      if (this._fillPaintCache?.key !== key) {
+        ;(this._fillPaintCache?.paint as SkPaint | undefined)?.delete()
+        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity), key }
+      }
+      canvas.drawPath(skPath, this._fillPaintCache!.paint as SkPaint)
+    } else if (this._fillPaintCache) {
+      ;(this._fillPaintCache.paint as SkPaint).delete()
+      this._fillPaintCache = null
     }
 
     if (this.stroke) {
-      const paint = makeStrokePaint(ck, this.stroke, this.opacity)
-      canvas.drawPath(skPath, paint)
-      paint.delete()
+      const key = strokeCacheKey(this.stroke, this.opacity)
+      if (this._strokePaintCache?.key !== key) {
+        ;(this._strokePaintCache?.paint as SkPaint | undefined)?.delete()
+        this._strokePaintCache = { paint: makeStrokePaint(ck, this.stroke, this.opacity), key }
+      }
+      canvas.drawPath(skPath, this._strokePaintCache!.paint as SkPaint)
+    } else if (this._strokePaintCache) {
+      ;(this._strokePaintCache.paint as SkPaint).delete()
+      this._strokePaintCache = null
     }
 
     canvas.restore()

@@ -14,6 +14,7 @@ import type {
   StageEventMap,
   StageInterface,
   ObjectDeserializer,
+  ObjectMutationEvent,
 } from './types.js'
 import type { BaseObject } from './objects/BaseObject.js'
 
@@ -105,6 +106,8 @@ export class Stage implements StageInterface {
   private _boundContextLost: (e: Event) => void
   private _boundContextRestored: () => void
   private _objectRegistry = new Map<string, ObjectDeserializer>()
+  private _batchDepth: number = 0
+  private _pendingMutations: ObjectMutationEvent[] = []
 
   constructor(options: StageOptions) {
     this.id = `stage_${Date.now().toString(36)}`
@@ -157,12 +160,7 @@ export class Stage implements StageInterface {
       )
     })
     layer.setPropertyMutationHandler((obj, property, oldValue, newValue) => {
-      this._events.emitStage('object:mutated', {
-        object: obj,
-        property,
-        oldValue,
-        newValue,
-      })
+      this._handlePropertyMutation({ object: obj, property, oldValue, newValue })
     })
     this._layers.push(layer)
     this.markDirty()
@@ -237,6 +235,30 @@ export class Stage implements StageInterface {
 
   emit<K extends keyof StageEventMap>(event: K, data: StageEventMap[K]): void {
     this._events.emitStage(event, data)
+  }
+
+  batch(fn: () => void): void {
+    this._batchDepth++
+    try {
+      fn()
+    } finally {
+      this._batchDepth--
+      if (this._batchDepth === 0 && this._pendingMutations.length > 0) {
+        const mutations = this._pendingMutations.splice(0)
+        for (const m of mutations) {
+          this._events.emitStage('object:mutated', m)
+        }
+        this._events.emitStage('batch:commit', { mutations })
+      }
+    }
+  }
+
+  private _handlePropertyMutation(event: ObjectMutationEvent): void {
+    if (this._batchDepth > 0) {
+      this._pendingMutations.push(event)
+    } else {
+      this._events.emitStage('object:mutated', event)
+    }
   }
 
   addRenderPass(pass: RenderPass): void {

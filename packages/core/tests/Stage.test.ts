@@ -6,7 +6,7 @@ import { Group } from '../src/objects/Group.js'
 import { BaseObject } from '../src/objects/BaseObject.js'
 import { BoundingBox } from '../src/math/BoundingBox.js'
 import { createMockCK, createMockHTMLCanvas } from './__mocks__/canvaskit.js'
-import type { ObjectJSON, RenderContext } from '../src/types.js'
+import type { ObjectJSON, ObjectMutationEvent, RenderContext } from '../src/types.js'
 
 // ---------------------------------------------------------------------------
 // Minimal custom object type used by NV-004 tests
@@ -353,6 +353,122 @@ describe('Stage', () => {
       expect(objs[0]!.name).toBe('r')
       expect(objs[1]!.getType()).toBe('CustomNode')
       expect((objs[1] as CustomNode).customProp).toBe('c')
+    })
+  })
+
+  describe('NV-033 Stage.batch()', () => {
+    it('suppresses individual object:mutated events during batch', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+
+      const mutations: ObjectMutationEvent[] = []
+      stage.on('object:mutated', (e) => mutations.push(e))
+
+      stage.batch(() => {
+        rect.x = 10
+        rect.y = 20
+        // During batch — mutations must not fire yet
+        expect(mutations).toHaveLength(0)
+      })
+
+      // After batch — all three should have fired
+      expect(mutations).toHaveLength(2)
+      expect(mutations[0]!.property).toBe('x')
+      expect(mutations[1]!.property).toBe('y')
+    })
+
+    it('emits batch:commit with all mutations after batch exits', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+
+      const commits: { mutations: ObjectMutationEvent[] }[] = []
+      stage.on('batch:commit', (e) => commits.push(e))
+
+      stage.batch(() => {
+        rect.x = 50
+        rect.y = 60
+        rect.width = 200
+      })
+
+      expect(commits).toHaveLength(1)
+      expect(commits[0]!.mutations).toHaveLength(3)
+      expect(commits[0]!.mutations[0]!.property).toBe('x')
+      expect(commits[0]!.mutations[1]!.property).toBe('y')
+      expect(commits[0]!.mutations[2]!.property).toBe('width')
+    })
+
+    it('does not emit batch:commit when batch has no mutations', () => {
+      const { stage } = makeStage()
+      const commits: unknown[] = []
+      stage.on('batch:commit', (e) => commits.push(e))
+      stage.batch(() => { /* no mutations */ })
+      expect(commits).toHaveLength(0)
+    })
+
+    it('nested batches flush only when outermost exits', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+
+      const mutations: ObjectMutationEvent[] = []
+      const commits: unknown[] = []
+      stage.on('object:mutated', (e) => mutations.push(e))
+      stage.on('batch:commit', (e) => commits.push(e))
+
+      stage.batch(() => {
+        rect.x = 10
+        stage.batch(() => {
+          rect.y = 20
+          expect(mutations).toHaveLength(0)
+          expect(commits).toHaveLength(0)
+        })
+        // Still inside outer batch
+        expect(mutations).toHaveLength(0)
+        expect(commits).toHaveLength(0)
+      })
+
+      expect(mutations).toHaveLength(2)
+      expect(commits).toHaveLength(1)
+    })
+
+    it('flushes and emits batch:commit even if fn throws', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+
+      const mutations: ObjectMutationEvent[] = []
+      stage.on('object:mutated', (e) => mutations.push(e))
+
+      expect(() => {
+        stage.batch(() => {
+          rect.x = 99
+          throw new Error('oops')
+        })
+      }).toThrow('oops')
+
+      // The mutation queued before the throw must still flush
+      expect(mutations).toHaveLength(1)
+      expect(mutations[0]!.property).toBe('x')
+    })
+
+    it('mutations outside batch still fire immediately', () => {
+      const { stage } = makeStage()
+      const layer = stage.addLayer()
+      const rect = new Rect({ x: 0, y: 0, width: 100, height: 100 })
+      layer.add(rect)
+
+      const mutations: ObjectMutationEvent[] = []
+      stage.on('object:mutated', (e) => mutations.push(e))
+
+      rect.x = 42
+      expect(mutations).toHaveLength(1)
+      expect(mutations[0]!.newValue).toBe(42)
     })
   })
 

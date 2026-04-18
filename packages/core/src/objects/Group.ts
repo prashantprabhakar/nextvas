@@ -6,8 +6,8 @@ import type { RenderContext, ObjectJSON, ObjectEventMap, ObjectDeserializer } fr
 interface SkCanvas {
   save(): number
   restore(): void
-  concat(matrix: number[]): void
-  clipRect(rect: number[], op: unknown, doAntiAlias: boolean): void
+  concat(matrix: ArrayLike<number>): void
+  clipRect(rect: ArrayLike<number>, op: unknown, doAntiAlias: boolean): void
 }
 
 interface GroupCK {
@@ -58,10 +58,11 @@ export class Group extends BaseObject {
     return this
   }
 
-  /** Remove all children. */
+  /** Remove all children, destroying their CanvasKit resources. */
   clear(): this {
     for (const child of this._children) {
       child.parent = null
+      child.destroy()
     }
     this._children = []
     this._invalidateBBox()
@@ -173,16 +174,15 @@ export class Group extends BaseObject {
   render(ctx: RenderContext): void {
     if (!this.visible || this.opacity === 0 || !ctx.skCanvas) return
     const canvas = ctx.skCanvas as SkCanvas
-    const ck = ctx.canvasKit as GroupCK
+    const ck = ctx.canvasKit as unknown as GroupCK
 
     canvas.save()
     // Push this group's local transform — children will push their own,
     // building up the full world transform via canvas state accumulation.
-    canvas.concat(Array.from(this.getLocalTransform().values))
+    canvas.concat(this.getLocalTransform().values)
 
     if (this.clip) {
-      const rect = Array.from(ck.LTRBRect(0, 0, this.width, this.height))
-      canvas.clipRect(rect, ck.ClipOp.Intersect, true)
+      canvas.clipRect(ck.LTRBRect(0, 0, this.width, this.height), ck.ClipOp.Intersect, true)
     }
 
     for (const child of this._children) {

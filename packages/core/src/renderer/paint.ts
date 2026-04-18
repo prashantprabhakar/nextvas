@@ -8,7 +8,7 @@ import type { Fill, StrokeStyle, ColorRGBA, SolidFill, LinearGradientFill } from
 // Minimal CanvasKit interfaces needed by this module
 // ---------------------------------------------------------------------------
 
-interface SkPaint {
+export interface SkPaint {
   setStyle(style: unknown): void
   setColor(color: Float32Array): void
   setAntiAlias(aa: boolean): void
@@ -132,6 +132,30 @@ export function makeStrokePaint(ck: PaintCK, stroke: StrokeStyle, opacity: numbe
   }
 
   return paint
+}
+
+// ---------------------------------------------------------------------------
+// Paint cache key helpers — cheap string keys to detect when a paint needs rebuild
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a cheap cache key for a fill + opacity combo.
+ * Solid fills use a compact format; gradients fall back to JSON (changed rarely).
+ */
+export function fillCacheKey(fill: Fill, opacity: number): string {
+  if (fill.type === 'solid') {
+    const { r, g, b, a } = fill.color
+    return `s:${r}:${g}:${b}:${a}:${opacity}`
+  }
+  return JSON.stringify(fill) + ':' + opacity
+}
+
+/**
+ * Returns a cheap cache key for a stroke + opacity combo.
+ */
+export function strokeCacheKey(stroke: StrokeStyle, opacity: number): string {
+  const { r, g, b, a } = stroke.color
+  return `${r}:${g}:${b}:${a}:${stroke.width}:${stroke.cap ?? 'butt'}:${stroke.join ?? 'miter'}:${stroke.dash?.join(',') ?? ''}:${stroke.dashOffset ?? 0}:${opacity}`
 }
 
 // ---------------------------------------------------------------------------

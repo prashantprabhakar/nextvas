@@ -1,12 +1,12 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { BoundingBox } from '../math/BoundingBox.js'
-import { makeStrokePaint, type PaintCK } from '../renderer/paint.js'
+import { makeStrokePaint, strokeCacheKey, type PaintCK, type SkPaint } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
 
 interface SkCanvas {
   save(): number
   restore(): void
-  concat(matrix: number[]): void
+  concat(matrix: ArrayLike<number>): void
   drawLine(x0: number, y0: number, x1: number, y1: number, paint: unknown): void
 }
 
@@ -90,18 +90,20 @@ export class Line extends BaseObject {
   }
 
   render(ctx: RenderContext): void {
-    if (!this.visible || !ctx.skCanvas) return
-    if (!this.stroke) return
+    if (!this.visible || !ctx.skCanvas || !this.stroke) return
 
     const ck = ctx.canvasKit as PaintCK
     const canvas = ctx.skCanvas as SkCanvas
 
     canvas.save()
-    canvas.concat(Array.from(this.getLocalTransform().values))
+    canvas.concat(this.getLocalTransform().values)
 
-    const paint = makeStrokePaint(ck, this.stroke, this.opacity)
-    canvas.drawLine(this.x1, this.y1, this.x2, this.y2, paint)
-    paint.delete()
+    const key = strokeCacheKey(this.stroke, this.opacity)
+    if (this._strokePaintCache?.key !== key) {
+      ;(this._strokePaintCache?.paint as SkPaint | undefined)?.delete()
+      this._strokePaintCache = { paint: makeStrokePaint(ck, this.stroke, this.opacity), key }
+    }
+    canvas.drawLine(this.x1, this.y1, this.x2, this.y2, this._strokePaintCache!.paint as SkPaint)
 
     canvas.restore()
   }

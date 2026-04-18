@@ -149,6 +149,10 @@ export abstract class BaseObject {
   _localTransformCache: Matrix3x3 | null = null
   /** @internal Cached world-space AABB. Cleared on any spatial mutation. */
   _worldBBoxCache: BoundingBox | null = null
+  /** @internal Cached fill SkPaint — reused across frames, rebuilt only when fill/opacity changes. */
+  _fillPaintCache: { paint: unknown; key: string } | null = null
+  /** @internal Cached stroke SkPaint — reused across frames, rebuilt only when stroke/opacity changes. */
+  _strokePaintCache: { paint: unknown; key: string } | null = null
   /** @internal Set by Layer to receive notifications when this object's bbox changes. */
   private _onBBoxChange: (() => void) | null = null
   /** @internal Set by Layer to receive notifications when this object's properties change. */
@@ -395,5 +399,9 @@ export abstract class BaseObject {
   destroy(): void {
     this.removeAllListeners()
     this.parent = null
+    ;(this._fillPaintCache?.paint as { delete(): void } | undefined)?.delete()
+    ;(this._strokePaintCache?.paint as { delete(): void } | undefined)?.delete()
+    this._fillPaintCache = null
+    this._strokePaintCache = null
   }
 }

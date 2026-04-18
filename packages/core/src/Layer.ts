@@ -193,7 +193,7 @@ export class Layer {
 
     if (candidates.length === 0) return null
 
-    const candidateSet = new Set<BaseObject>(candidates.map((c) => c.obj))
+    const candidateSet = new Set<BaseObject>(candidates.map((c: RBushItem) => c.obj))
 
     // Walk in reverse z-order (topmost first) and test only candidates.
     for (let i = this._objects.length - 1; i >= 0; i--) {

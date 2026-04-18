@@ -64,7 +64,7 @@ interface SkParagraphBuilder {
 interface SkCanvas {
   save(): number
   restore(): void
-  concat(matrix: number[]): void
+  concat(matrix: ArrayLike<number>): void
   translate(dx: number, dy: number): void
   drawParagraph(para: SkParagraph, x: number, y: number): void
 }
@@ -202,7 +202,7 @@ export class Text extends BaseObject {
   render(ctx: RenderContext): void {
     if (!this.visible || !ctx.skCanvas || !this.text) return
 
-    const ck = ctx.canvasKit as TextCK
+    const ck = ctx.canvasKit as unknown as TextCK
     const canvas = ctx.skCanvas as SkCanvas
     const fontMgr = ctx.fontManager
 
@@ -220,7 +220,7 @@ export class Text extends BaseObject {
     if (!fontProvider) return
 
     canvas.save()
-    canvas.concat(Array.from(this.getLocalTransform().values))
+    canvas.concat(this.getLocalTransform().values)
 
     // Build or reuse cached paragraph
     if (!this._paragraph || this._paraLayoutWidth !== this.width) {

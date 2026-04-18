@@ -23,7 +23,7 @@ export type ObjectDeserializer = (json: ObjectJSON) => BaseObject
  */
 export interface CanvasKitLike {
   // Construction
-  Paint: new () => { setColor(c: Float32Array): void; setStyle(s: unknown): void; setStrokeWidth(w: number): void; setAntiAlias(aa: boolean): void; delete(): void; [k: string]: unknown }
+  Paint: new () => { setColor(c: Float32Array): void; setStyle(s: unknown): void; setStrokeWidth(w: number): void; setAntiAlias(aa: boolean): void; setStrokeCap(cap: unknown): void; setStrokeJoin(join: unknown): void; setStrokeMiter(limit: number): void; setShader(shader: unknown | null): void; setAlphaf(alpha: number): void; delete(): void; [k: string]: unknown }
   Color4f(r: number, g: number, b: number, a: number): Float32Array
   LTRBRect(l: number, t: number, r: number, b: number): Float32Array
 
@@ -185,6 +185,12 @@ export interface StageEventMap extends ObjectEventMap {
   'objects:deleted': { objects: unknown[] }
   /** Fired by HistoryPlugin when the undo/redo stack changes. */
   'history:change': { canUndo: boolean; canRedo: boolean }
+  /**
+   * Fired once when a `stage.batch()` call completes.
+   * Contains all mutations that were coalesced. HistoryPlugin listens to this
+   * event to record a single undo entry for the entire batch.
+   */
+  'batch:commit': { mutations: ObjectMutationEvent[] }
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +288,28 @@ export interface StageInterface {
    * ```
    */
   registerObject(typeName: string, deserializer: ObjectDeserializer): void
+  /**
+   * Coalesce multiple property mutations into a single `object:mutated` flush
+   * and one `batch:commit` event.
+   *
+   * While `fn` is executing, individual `object:mutated` events are suppressed.
+   * When `fn` returns, all collected mutations are emitted as individual
+   * `object:mutated` events followed by a single `batch:commit` event.
+   * HistoryPlugin uses `batch:commit` to record one undo entry for the whole batch.
+   *
+   * Batches can be nested — the flush happens only when the outermost batch exits.
+   *
+   * @example
+   * ```ts
+   * stage.batch(() => {
+   *   obj.x = 100
+   *   obj.y = 200
+   *   obj.width = 300
+   * })
+   * // Fires three object:mutated events + one batch:commit event, not three separate flushes.
+   * ```
+   */
+  batch(fn: () => void): void
 }
 
 // ---------------------------------------------------------------------------
