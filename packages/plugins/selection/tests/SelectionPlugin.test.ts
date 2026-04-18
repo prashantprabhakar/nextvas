@@ -14,12 +14,13 @@ function makePointerEvent(
     screenX?: number
     screenY?: number
     shiftKey?: boolean
+    altKey?: boolean
   } = {},
 ): CanvasPointerEvent {
   return {
     world: { x: opts.worldX ?? 0, y: opts.worldY ?? 0 },
     screen: { x: opts.screenX ?? 0, y: opts.screenY ?? 0 },
-    originalEvent: { shiftKey: opts.shiftKey ?? false } as MouseEvent,
+    originalEvent: { shiftKey: opts.shiftKey ?? false, altKey: opts.altKey ?? false } as MouseEvent,
     stopped: false,
     stopPropagation() {
       this.stopped = true
@@ -240,6 +241,133 @@ describe('SelectionPlugin', () => {
       const event = new KeyboardEvent('keydown', { key: 'Delete' })
       document.dispatchEvent(event)
       expect(stage.emit).toHaveBeenCalledWith('objects:deleted', { objects: [rectA] })
+    })
+  })
+
+  describe('§1.8 resize modifiers', () => {
+    // rectA is 100×100 at (0,0). Handles at corners in world space.
+    // Stage mock: screenToWorld maps 1:1, scale=1.
+    // br handle is at world (100, 100). Threshold = (8+2)/1 = 10.
+    // So clicking at screen (100, 100) hits the br handle.
+
+    it('br resize without modifiers changes width and height, x/y unchanged', () => {
+      plugin.select(rectA)
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 100, worldY: 100, screenX: 100, screenY: 100 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 150, worldY: 130, screenX: 150, screenY: 130 }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 150, worldY: 130 }))
+      expect(rectA.x).toBe(0)
+      expect(rectA.y).toBe(0)
+      expect(rectA.width).toBe(150)
+      expect(rectA.height).toBe(130)
+    })
+
+    it('br resize with Alt resizes from center (x/y shift by half delta)', () => {
+      plugin.select(rectA)
+      // drag br by (+40, +20) → width=140, height=120, center stays at (50,50)
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 100, worldY: 100, screenX: 100, screenY: 100 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 140, worldY: 120, screenX: 140, screenY: 120, altKey: true }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 140, worldY: 120 }))
+      expect(rectA.x).toBe(-40)   // left edge moves left by 40
+      expect(rectA.y).toBe(-20)   // top edge moves up by 20
+      expect(rectA.width).toBe(180)  // 100 + 2*40
+      expect(rectA.height).toBe(140) // 100 + 2*20
+    })
+
+    it('br resize with Shift locks aspect ratio (1:1 square)', () => {
+      plugin.select(rectA) // 100×100, ratio=1
+      // drag br by (+50, +20) → relDX=0.5 > relDY=0.2, width drives
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 100, worldY: 100, screenX: 100, screenY: 100 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 150, worldY: 120, screenX: 150, screenY: 120, shiftKey: true }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 150, worldY: 120 }))
+      expect(rectA.x).toBe(0)
+      expect(rectA.y).toBe(0)
+      expect(rectA.width).toBe(150)
+      expect(rectA.height).toBe(150) // constrained to match width (ratio=1)
+    })
+
+    it('br resize with Shift and non-square locks aspect ratio', () => {
+      // make rectA 200×100 (ratio=2)
+      rectA.width = 200
+      plugin.select(rectA)
+      // drag br by (+100, +100) → relDX=0.5, relDY=1.0 → height drives
+      // constrainedW = 200 * 2 = 400... wait that's ratio=2, height drives means width = newH * ratio
+      // newW=300, newH=200, relDX=100/200=0.5, relDY=100/100=1.0 → height drives
+      // constrainedW = 200 * 2 = 400
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 200, worldY: 100, screenX: 200, screenY: 100 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 300, worldY: 200, screenX: 300, screenY: 200, shiftKey: true }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 300, worldY: 200 }))
+      expect(rectA.width).toBe(400)
+      expect(rectA.height).toBe(200)
+    })
+
+    it('ml (left edge) resize moves x and changes width', () => {
+      plugin.select(rectA)
+      // ml handle is at world (0, 50). threshold=10 → screenX=0 hits it.
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 0, worldY: 50, screenX: 0, screenY: 50 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 20, worldY: 50, screenX: 20, screenY: 50 }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 20, worldY: 50 }))
+      expect(rectA.x).toBe(20)
+      expect(rectA.width).toBe(80)
+      expect(rectA.y).toBe(0)
+      expect(rectA.height).toBe(100)
+    })
+
+    it('ml resize with Alt resizes from center', () => {
+      plugin.select(rectA)
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 0, worldY: 50, screenX: 0, screenY: 50 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 10, worldY: 50, screenX: 10, screenY: 50, altKey: true }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 10, worldY: 50 }))
+      expect(rectA.x).toBe(10)
+      expect(rectA.width).toBe(80) // left +10, right -10 → width = 100-20 = 80
+    })
+  })
+
+  describe('§1.8 rotation drag', () => {
+    it('rotation handle drag rotates the object', () => {
+      plugin.select(rectA) // 100×100 at (0,0), center=(50,50)
+      // rot handle is at world (50, 0 - 24) = (50, -24). screenToWorld 1:1.
+      // drag from (50, -24) to (50+50, -24) → angle change = atan2(-24, 50) - atan2(-24, 0)
+      // atan2(-24, 0) = -PI/2. atan2(-24, 50) ≈ -0.4475 rad
+      // deltaAngle ≈ -0.4475 - (-PI/2) ≈ 1.123 rad ≈ 64.4°
+      const rotY = -24
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 50, worldY: rotY, screenX: 50, screenY: rotY }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 100, worldY: rotY, screenX: 100, screenY: rotY }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 100, worldY: rotY }))
+      // rotation should be non-zero
+      expect(rectA.rotation).not.toBe(0)
+    })
+
+    it('rotation with Shift snaps to 15° increments', () => {
+      plugin.select(rectA) // center = (50, 50)
+      // Drag rotation handle from directly above center to somewhere
+      // Start: (50, 50 - 74) = (50, -24) — straight above → angle = -PI/2
+      // Move to (50+74, 50) = (124, 50) — directly right → angle = 0
+      // deltaAngle = 0 - (-PI/2) = PI/2 = 90°
+      // Snapped to 15°: 90° → stays 90°
+      const cx = 50
+      const cy = 50
+      const startX = cx
+      const startY = cy - 74 // directly above center
+      const endX = cx + 74   // directly right of center
+      const endY = cy
+
+      fire(stage, 'mousedown', makePointerEvent({ worldX: startX, worldY: startY, screenX: startX, screenY: startY }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: endX, worldY: endY, screenX: endX, screenY: endY, shiftKey: true }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: endX, worldY: endY }))
+
+      // 90° is already a multiple of 15 so it should land exactly on 90
+      expect(Math.round(rectA.rotation)).toBe(90)
+    })
+
+    it('rotation drag 180° — opposite direction from handle', () => {
+      plugin.select(rectA) // rotation=0, bbox(0,0,100,100), center=(50,50), rot handle=(50,-24)
+      // start angle: atan2(-24-50, 50-50) = atan2(-74, 0) = -PI/2 (straight above center)
+      // drag to (50, 124): angle = atan2(124-50, 50-50) = atan2(74, 0) = PI/2 (straight below)
+      // deltaAngle = PI/2 - (-PI/2) = PI → 180°
+      fire(stage, 'mousedown', makePointerEvent({ worldX: 50, worldY: -24, screenX: 50, screenY: -24 }))
+      fire(stage, 'mousemove', makePointerEvent({ worldX: 50, worldY: 124, screenX: 50, screenY: 124 }))
+      fire(stage, 'mouseup', makePointerEvent({ worldX: 50, worldY: 124 }))
+      expect(Math.round(rectA.rotation)).toBe(180)
     })
   })
 })

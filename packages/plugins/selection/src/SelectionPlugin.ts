@@ -74,6 +74,10 @@ interface DragState {
   marqueeY?: number
   marqueeW?: number
   marqueeH?: number
+  // rotation-specific: pivot point and angle at drag start
+  rotCenterX?: number
+  rotCenterY?: number
+  startAngle?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +301,7 @@ export class SelectionPlugin implements Plugin {
     // Check if clicking on a resize/rotation handle
     const handle = this._hitTestHandle(screen.x, screen.y)
     if (handle && this._selected.size > 0) {
-      this._startDrag('resize', e, handle)
+      this._startDrag(handle === 'rot' ? 'rotate' : 'resize', e, handle)
       return
     }
 
@@ -332,6 +336,9 @@ export class SelectionPlugin implements Plugin {
   private _handleMouseMove(e: CanvasPointerEvent): void {
     if (!this._dragState || !this._stage) return
     const { world } = e
+    const mouse = e.originalEvent as MouseEvent
+    const shiftHeld = mouse.shiftKey
+    const altHeld = mouse.altKey
 
     const ds = this._dragState
     const dWorldX = world.x - ds.startWorldX
@@ -347,7 +354,9 @@ export class SelectionPlugin implements Plugin {
         }
       }
     } else if (ds.type === 'resize' && ds.handle) {
-      this._applyResize(ds.handle, dWorldX, dWorldY)
+      this._applyResize(ds.handle, dWorldX, dWorldY, shiftHeld, altHeld)
+    } else if (ds.type === 'rotate') {
+      this._applyRotation(world.x, world.y, shiftHeld)
     } else if (ds.type === 'marquee') {
       // Track marquee in world space so finalization and drawing are consistent
       ds.marqueeX = Math.min(world.x, ds.startWorldX)
@@ -411,57 +420,147 @@ export class SelectionPlugin implements Plugin {
         rotation: obj.rotation,
       })
     }
+
+    let rotCenterX: number | undefined
+    let rotCenterY: number | undefined
+    let startAngle: number | undefined
+
+    if (type === 'rotate') {
+      const bb = this._getSelectionBB()
+      if (bb) {
+        rotCenterX = (bb.x + bb.r) / 2
+        rotCenterY = (bb.y + bb.b) / 2
+        startAngle = Math.atan2(e.world.y - rotCenterY, e.world.x - rotCenterX)
+      }
+    }
+
     this._dragState = {
       type,
       startWorldX: e.world.x,
       startWorldY: e.world.y,
       initialPositions,
       ...(handle !== undefined && { handle }),
+      ...(rotCenterX !== undefined && { rotCenterX, rotCenterY, startAngle }),
     }
   }
 
-  private _applyResize(handle: HandleId, dWorldX: number, dWorldY: number): void {
+  private _applyResize(
+    handle: HandleId,
+    dWorldX: number,
+    dWorldY: number,
+    shiftHeld: boolean,
+    altHeld: boolean,
+  ): void {
     for (const obj of this._selected) {
       if (obj.locked || !obj.isResizable) continue
       const init = this._dragState!.initialPositions.get(obj.id)
       if (!init) continue
 
+      // Compute new edges from the drag delta. Alt (resize from center) mirrors
+      // the drag on the opposite edge so the object grows/shrinks symmetrically.
+      let left = init.x
+      let right = init.x + init.width
+      let top = init.y
+      let bottom = init.y + init.height
+
       switch (handle) {
         case 'br':
-          obj.width = Math.max(1, init.width + dWorldX)
-          obj.height = Math.max(1, init.height + dWorldY)
+          right += dWorldX; bottom += dWorldY
+          if (altHeld) { left -= dWorldX; top -= dWorldY }
           break
         case 'bl':
-          obj.x = init.x + dWorldX
-          obj.width = Math.max(1, init.width - dWorldX)
-          obj.height = Math.max(1, init.height + dWorldY)
+          left += dWorldX; bottom += dWorldY
+          if (altHeld) { right -= dWorldX; top -= dWorldY }
           break
         case 'tr':
-          obj.y = init.y + dWorldY
-          obj.width = Math.max(1, init.width + dWorldX)
-          obj.height = Math.max(1, init.height - dWorldY)
+          right += dWorldX; top += dWorldY
+          if (altHeld) { left -= dWorldX; bottom -= dWorldY }
           break
         case 'tl':
-          obj.x = init.x + dWorldX
-          obj.y = init.y + dWorldY
-          obj.width = Math.max(1, init.width - dWorldX)
-          obj.height = Math.max(1, init.height - dWorldY)
+          left += dWorldX; top += dWorldY
+          if (altHeld) { right -= dWorldX; bottom -= dWorldY }
           break
         case 'mr':
-          obj.width = Math.max(1, init.width + dWorldX)
+          right += dWorldX
+          if (altHeld) left -= dWorldX
           break
         case 'ml':
-          obj.x = init.x + dWorldX
-          obj.width = Math.max(1, init.width - dWorldX)
+          left += dWorldX
+          if (altHeld) right -= dWorldX
           break
         case 'bc':
-          obj.height = Math.max(1, init.height + dWorldY)
+          bottom += dWorldY
+          if (altHeld) top -= dWorldY
           break
         case 'tc':
-          obj.y = init.y + dWorldY
-          obj.height = Math.max(1, init.height - dWorldY)
+          top += dWorldY
+          if (altHeld) bottom -= dWorldY
           break
       }
+
+      // Shift: lock aspect ratio for corner handles. Constrain the dimension
+      // whose relative change is smaller to match the larger-changing dimension.
+      if (shiftHeld && (handle === 'tl' || handle === 'tr' || handle === 'bl' || handle === 'br')) {
+        const ratio = init.width / Math.max(1, init.height)
+        const newW = right - left
+        const newH = bottom - top
+        const relDX = Math.abs(newW - init.width) / Math.max(1, init.width)
+        const relDY = Math.abs(newH - init.height) / Math.max(1, init.height)
+        if (relDX >= relDY) {
+          // Width drives — constrain height
+          const constrainedH = Math.max(1, newW / ratio)
+          if (handle === 'tl' || handle === 'tr') top = bottom - constrainedH
+          else bottom = top + constrainedH
+        } else {
+          // Height drives — constrain width
+          const constrainedW = Math.max(1, newH * ratio)
+          if (handle === 'tl' || handle === 'bl') left = right - constrainedW
+          else right = left + constrainedW
+        }
+      }
+
+      obj.x = left
+      obj.y = top
+      obj.width = Math.max(1, right - left)
+      obj.height = Math.max(1, bottom - top)
+    }
+  }
+
+  /** Rotate selected objects around the selection center. Snap to 15° if shiftHeld. */
+  private _applyRotation(worldX: number, worldY: number, shiftHeld: boolean): void {
+    const ds = this._dragState!
+    if (ds.rotCenterX === undefined || ds.rotCenterY === undefined || ds.startAngle === undefined) return
+
+    const cx = ds.rotCenterX
+    const cy = ds.rotCenterY
+    const currentAngle = Math.atan2(worldY - cy, worldX - cx)
+    let deltaAngle = currentAngle - ds.startAngle
+
+    if (shiftHeld) {
+      const snapRad = (15 * Math.PI) / 180
+      deltaAngle = Math.round(deltaAngle / snapRad) * snapRad
+    }
+
+    const deltaDeg = (deltaAngle * 180) / Math.PI
+    const cos = Math.cos(deltaAngle)
+    const sin = Math.sin(deltaAngle)
+
+    for (const obj of this._selected) {
+      if (obj.locked) continue
+      const init = ds.initialPositions.get(obj.id)
+      if (!init) continue
+
+      // Rotate the object's center around the selection center
+      const objCx = init.x + init.width / 2
+      const objCy = init.y + init.height / 2
+      const dx = objCx - cx
+      const dy = objCy - cy
+      const newCx = cx + dx * cos - dy * sin
+      const newCy = cy + dx * sin + dy * cos
+
+      obj.x = newCx - obj.width / 2
+      obj.y = newCy - obj.height / 2
+      obj.rotation = init.rotation + deltaDeg
     }
   }
 
