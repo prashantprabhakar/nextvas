@@ -37,18 +37,18 @@ describe('migrate', () => {
   describe('invalid inputs', () => {
     it('throws on invalid input semver', () => {
       const json = scene('not-semver')
-      expect(() => migrate(json, '1.0.0')).toThrow(/invalid semver/)
+      expect(() => migrate(json, '1.0.0')).toThrow(/invalid semver/i)
     })
 
     it('throws on invalid target semver', () => {
       const json = scene('1.0.0')
-      expect(() => migrate(json, 'bad')).toThrow(/invalid semver/)
+      expect(() => migrate(json, 'bad')).toThrow(/invalid semver/i)
     })
 
     it('throws when attempting to downgrade', () => {
       // Simulate a future JSON being loaded by an older runtime
       const json = scene('2.0.0')
-      expect(() => migrate(json, '1.0.0')).toThrow(/cannot downgrade/)
+      expect(() => migrate(json, '1.0.0')).toThrow(/cannot downgrade/i)
     })
   })
 
@@ -56,7 +56,7 @@ describe('migrate', () => {
     it('throws when no migration step covers the gap', () => {
       // 1.0.0 → 9.0.0 — no step registered
       const json = scene('1.0.0')
-      expect(() => migrate(json, '9.0.0')).toThrow(/no migration step registered/)
+      expect(() => migrate(json, '9.0.0')).toThrow(/no migration step registered/i)
     })
   })
 

@@ -6,6 +6,7 @@ import { FontManager } from './FontManager.js'
 import { BoundingBox } from './math/BoundingBox.js'
 import type { ViewportOptions } from './Viewport.js'
 import type {
+  CanvasKitLike,
   Plugin,
   RenderContext,
   RenderPass,
@@ -52,12 +53,24 @@ export interface StageOptions {
   /**
    * CanvasKit instance — result of `loadCanvasKit()` from @nexvas/renderer.
    */
-  canvasKit: unknown
+  canvasKit: CanvasKitLike
   viewport?: ViewportOptions
   /**
    * Device pixel ratio. Defaults to window.devicePixelRatio.
    */
   pixelRatio?: number
+}
+
+export interface StartLoopOptions {
+  /**
+   * Wait for all fonts to finish loading before starting the render loop.
+   * Defaults to `true`. When true, `startLoop()` returns a Promise that resolves
+   * once fonts are ready and the loop is running — preventing Text objects from
+   * rendering invisibly on the first frame.
+   *
+   * Set to `false` to start the loop immediately (fonts may still be loading).
+   */
+  waitForFonts?: boolean
 }
 
 /**
@@ -70,13 +83,13 @@ export interface StageOptions {
  * const stage = new Stage({ canvas, canvasKit: ck })
  * const layer = stage.addLayer()
  * layer.add(new Rect({ x: 10, y: 10, width: 100, height: 100, fill: { type: 'solid', color: { r: 1, g: 0, b: 0, a: 1 } } }))
- * stage.startLoop()
+ * await stage.startLoop()
  * ```
  */
 export class Stage implements StageInterface {
   readonly id: string
   readonly canvas: HTMLCanvasElement
-  readonly canvasKit: unknown
+  readonly canvasKit: CanvasKitLike
   readonly viewport: Viewport
   readonly plugins: PluginRegistry
   readonly fonts: FontManager
@@ -349,8 +362,24 @@ export class Stage implements StageInterface {
   /**
    * Start a requestAnimationFrame render loop.
    * The loop skips frames where nothing changed (dirty flag).
+   *
+   * By default waits for all fonts to finish loading before starting, so that
+   * Text objects render correctly on the first frame. Pass `{ waitForFonts: false }`
+   * to start immediately without waiting.
+   *
+   * @example
+   * ```ts
+   * // Recommended — fonts are guaranteed ready on first render:
+   * await stage.startLoop()
+   *
+   * // Opt out of waiting if you know fonts are already loaded:
+   * stage.startLoop({ waitForFonts: false })
+   * ```
    */
-  startLoop(): void {
+  async startLoop(options?: StartLoopOptions): Promise<void> {
+    if (options?.waitForFonts !== false) {
+      await this.fonts.waitForReady()
+    }
     if (this._rafId !== null) return
     const loop = (): void => {
       if (this._destroyed) return

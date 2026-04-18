@@ -1,6 +1,6 @@
 // Core entry point — public API for @nexvas/core
 
-export { Stage, type StageOptions } from './Stage.js'
+export { Stage, type StageOptions, type StartLoopOptions } from './Stage.js'
 export { Layer } from './Layer.js'
 export { Viewport, type ViewportOptions, type AnimateToOptions } from './Viewport.js'
 export { EventSystem } from './EventSystem.js'
@@ -39,6 +39,7 @@ export { Vec2, Matrix3x3, BoundingBox } from './math/index.js'
 
 // Types
 export type {
+  CanvasKitLike,
   Plugin,
   RenderContext,
   RenderPass,

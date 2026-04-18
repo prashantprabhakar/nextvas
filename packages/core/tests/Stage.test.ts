@@ -293,7 +293,7 @@ describe('Stage', () => {
 
       const { stage: stage2 } = makeStage()
       // No registerObject call — should throw
-      expect(() => stage2.loadJSON(json)).toThrow(/unknown object type "CustomNode"/)
+      expect(() => stage2.loadJSON(json)).toThrow(/unknown object type "CustomNode"/i)
     })
 
     it('registerObject overwrites a previous deserializer for the same type', () => {
