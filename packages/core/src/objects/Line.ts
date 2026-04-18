@@ -1,6 +1,6 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { BoundingBox } from '../math/BoundingBox.js'
-import { makeStrokePaint, strokeCacheKey, type PaintCK, type SkPaint } from '../renderer/paint.js'
+import { makeStrokePaint, strokeCacheKey, drawArrowHead, type PaintCK, type ArrowCK, type SkPaint } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
 
 interface SkCanvas {
@@ -8,6 +8,7 @@ interface SkCanvas {
   restore(): void
   concat(matrix: ArrayLike<number>): void
   drawLine(x0: number, y0: number, x1: number, y1: number, paint: unknown): void
+  drawPath(path: unknown, paint: unknown): void
 }
 
 export interface LineProps extends BaseObjectProps {
@@ -104,6 +105,21 @@ export class Line extends BaseObject {
       this._strokePaintCache = { paint: makeStrokePaint(ck, this.stroke, this.opacity), key }
     }
     canvas.drawLine(this.x1, this.y1, this.x2, this.y2, this._strokePaintCache!.paint as SkPaint)
+
+    const startArrow = this.stroke.startArrow ?? 'none'
+    const endArrow = this.stroke.endArrow ?? 'none'
+    if ((startArrow !== 'none' || endArrow !== 'none') && (ck as unknown as ArrowCK).Path) {
+      const arrowCK = ck as unknown as ArrowCK
+      const arrowSize = this.stroke.width * 5
+      if (startArrow !== 'none') {
+        const angle = Math.atan2(this.y1 - this.y2, this.x1 - this.x2)
+        drawArrowHead(canvas, arrowCK, this.x1, this.y1, angle, startArrow, arrowSize, this.stroke, this.opacity)
+      }
+      if (endArrow !== 'none') {
+        const angle = Math.atan2(this.y2 - this.y1, this.x2 - this.x1)
+        drawArrowHead(canvas, arrowCK, this.x2, this.y2, angle, endArrow, arrowSize, this.stroke, this.opacity)
+      }
+    }
 
     canvas.restore()
   }

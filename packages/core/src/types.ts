@@ -272,6 +272,9 @@ export type Fill = SolidFill | LinearGradientFill
 export type StrokeLineCap = 'butt' | 'round' | 'square'
 export type StrokeLineJoin = 'miter' | 'round' | 'bevel'
 
+/** Shape drawn at the start or end of a Line, Path, or Connector stroke. */
+export type ArrowHeadStyle = 'none' | 'arrow' | 'filled-arrow' | 'circle' | 'diamond'
+
 export interface StrokeStyle {
   color: ColorRGBA
   width: number
@@ -279,6 +282,10 @@ export interface StrokeStyle {
   join?: StrokeLineJoin
   dash?: number[]
   dashOffset?: number
+  /** Arrowhead drawn at the stroke start point. Defaults to 'none'. */
+  startArrow?: ArrowHeadStyle
+  /** Arrowhead drawn at the stroke end point. Defaults to 'none'. */
+  endArrow?: ArrowHeadStyle
 }
 
 // ---------------------------------------------------------------------------

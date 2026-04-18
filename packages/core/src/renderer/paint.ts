@@ -2,7 +2,7 @@
  * Internal paint/color helpers for CanvasKit rendering.
  * Not exported from the public package API.
  */
-import type { Fill, StrokeStyle, ColorRGBA, SolidFill, LinearGradientFill } from '../types.js'
+import type { Fill, StrokeStyle, ColorRGBA, SolidFill, LinearGradientFill, ArrowHeadStyle } from '../types.js'
 
 // ---------------------------------------------------------------------------
 // Minimal CanvasKit interfaces needed by this module
@@ -152,10 +152,104 @@ export function fillCacheKey(fill: Fill, opacity: number): string {
 
 /**
  * Returns a cheap cache key for a stroke + opacity combo.
+ * Includes arrowhead styles so the paint is invalidated when arrows change.
  */
 export function strokeCacheKey(stroke: StrokeStyle, opacity: number): string {
   const { r, g, b, a } = stroke.color
-  return `${r}:${g}:${b}:${a}:${stroke.width}:${stroke.cap ?? 'butt'}:${stroke.join ?? 'miter'}:${stroke.dash?.join(',') ?? ''}:${stroke.dashOffset ?? 0}:${opacity}`
+  return `${r}:${g}:${b}:${a}:${stroke.width}:${stroke.cap ?? 'butt'}:${stroke.join ?? 'miter'}:${stroke.dash?.join(',') ?? ''}:${stroke.dashOffset ?? 0}:${stroke.startArrow ?? 'none'}:${stroke.endArrow ?? 'none'}:${opacity}`
+}
+
+// ---------------------------------------------------------------------------
+// Arrowhead rendering
+// ---------------------------------------------------------------------------
+
+/** Minimal CanvasKit interface required for drawing arrowheads. */
+export interface ArrowCK extends PaintCK {
+  Path: {
+    MakeFromSVGString(svg: string): { delete(): void } | null
+  }
+}
+
+/** Minimal canvas interface required for drawing arrowheads. */
+export interface ArrowCanvas {
+  drawPath(path: unknown, paint: unknown): void
+}
+
+/**
+ * Draw an arrowhead at position (x, y) pointing in the given direction (radians).
+ *
+ * `size` is the overall length of the arrowhead in local coordinate units.
+ * For open-style arrows the existing stroke paint style is used; for filled shapes
+ * a temporary fill paint is created and deleted before returning.
+ *
+ * Called by Line, Path, and Connector render() methods.
+ */
+export function drawArrowHead(
+  canvas: ArrowCanvas,
+  ck: ArrowCK,
+  x: number,
+  y: number,
+  angle: number,
+  style: ArrowHeadStyle,
+  size: number,
+  stroke: StrokeStyle,
+  opacity: number,
+): void {
+  if (style === 'none') return
+
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const hw = size * 0.4 // half-width of arrowhead base
+
+  let svgPath: string
+
+  if (style === 'filled-arrow' || style === 'arrow') {
+    const lx = x - size * cos + hw * sin
+    const ly = y - size * sin - hw * cos
+    const rx = x - size * cos - hw * sin
+    const ry = y - size * sin + hw * cos
+    svgPath =
+      style === 'filled-arrow'
+        ? `M ${x} ${y} L ${lx} ${ly} L ${rx} ${ry} Z`
+        : `M ${lx} ${ly} L ${x} ${y} L ${rx} ${ry}`
+  } else if (style === 'diamond') {
+    const mx = x - size * 0.5 * cos
+    const my = y - size * 0.5 * sin
+    const lx = mx + hw * sin
+    const ly = my - hw * cos
+    const rx = mx - hw * sin
+    const ry = my + hw * cos
+    const bx = x - size * cos
+    const by = y - size * sin
+    svgPath = `M ${x} ${y} L ${lx} ${ly} L ${bx} ${by} L ${rx} ${ry} Z`
+  } else {
+    // circle — two-arc SVG approximation
+    const cx = x - size * 0.5 * cos
+    const cy = y - size * 0.5 * sin
+    const r = hw
+    svgPath = `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0`
+  }
+
+  const skPath = ck.Path.MakeFromSVGString(svgPath)
+  if (!skPath) return
+
+  const filled = style === 'filled-arrow' || style === 'diamond' || style === 'circle'
+  withPaint(ck, (paint) => {
+    paint.setAntiAlias(true)
+    paint.setAlphaf(opacity)
+    paint.setColor(colorToCK(ck, stroke.color))
+    if (filled) {
+      paint.setStyle(ck.PaintStyle.Fill)
+    } else {
+      paint.setStyle(ck.PaintStyle.Stroke)
+      paint.setStrokeWidth(stroke.width)
+      paint.setStrokeJoin(ck.StrokeJoin.Round)
+      paint.setStrokeCap(ck.StrokeCap.Round)
+    }
+    canvas.drawPath(skPath, paint)
+  })
+
+  skPath.delete()
 }
 
 // ---------------------------------------------------------------------------

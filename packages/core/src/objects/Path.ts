@@ -1,6 +1,6 @@
 import { BaseObject, type BaseObjectProps } from './BaseObject.js'
 import { BoundingBox } from '../math/BoundingBox.js'
-import { makeFillPaint, makeStrokePaint, fillCacheKey, strokeCacheKey, type PaintCK, type SkPaint } from '../renderer/paint.js'
+import { makeFillPaint, makeStrokePaint, fillCacheKey, strokeCacheKey, drawArrowHead, type PaintCK, type ArrowCK, type SkPaint } from '../renderer/paint.js'
 import type { RenderContext, ObjectJSON } from '../types.js'
 
 interface SkPath {
@@ -20,6 +20,93 @@ interface PathCK extends PaintCK {
   Path: {
     MakeFromSVGString(svg: string): SkPath | null
   }
+}
+
+interface PathEndpoints {
+  startX: number
+  startY: number
+  startAngle: number
+  endX: number
+  endY: number
+  endAngle: number
+}
+
+/**
+ * Parse an SVG path string to extract start/end points and tangent angles.
+ * Handles M, L, H, V, C, Q, Z commands (both absolute and relative).
+ * Used for positioning arrowheads at the correct location and angle.
+ */
+function parseSvgPathEndpoints(d: string): PathEndpoints | null {
+  // Tokenize: command letters and numeric values
+  const re = /[MLHVCQZmlhvcqz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g
+  const tokens: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = re.exec(d)) !== null) tokens.push(m[0])
+
+  if (!tokens.length) return null
+
+  let i = 0
+  let cx = 0, cy = 0       // current point
+  let spx = 0, spy = 0     // subpath start (for Z)
+  let startDX = 0, startDY = 0   // first segment direction vector
+  let prevX = 0, prevY = 0  // point before end (for end tangent)
+  let hasMove = false
+  let hasSegment = false
+
+  function num(): number { return parseFloat(tokens[i++] ?? '0') }
+  function isCmd(t: string | undefined): boolean { return !!t && /[MLHVCQZmlhvcqz]/.test(t) }
+
+  while (i < tokens.length) {
+    if (!isCmd(tokens[i])) { i++; continue }
+    const cmd = tokens[i++]!
+    const rel = cmd === cmd.toLowerCase() && cmd !== 'z' && cmd !== 'Z'
+    const c = cmd.toUpperCase()
+
+    // Process implicit repetition of the same command
+    do {
+      const ox = rel ? cx : 0
+      const oy = rel ? cy : 0
+
+      if (c === 'M') {
+        cx = ox + num(); cy = oy + num()
+        if (!hasMove) { spx = cx; spy = cy; hasMove = true }
+        spx = cx; spy = cy
+      } else if (c === 'L') {
+        const nx = ox + num(), ny = oy + num()
+        if (!hasSegment) { startDX = nx - cx; startDY = ny - cy; hasSegment = true }
+        prevX = cx; prevY = cy; cx = nx; cy = ny
+      } else if (c === 'H') {
+        const nx = ox + num(), ny = cy
+        if (!hasSegment) { startDX = nx - cx; startDY = 0; hasSegment = true }
+        prevX = cx; prevY = cy; cx = nx; cy = ny
+      } else if (c === 'V') {
+        const nx = cx, ny = oy + num()
+        if (!hasSegment) { startDX = 0; startDY = ny - cy; hasSegment = true }
+        prevX = cx; prevY = cy; cx = nx; cy = ny
+      } else if (c === 'C') {
+        const x1 = ox + num(), y1 = oy + num()
+        const x2 = ox + num(), y2 = oy + num()
+        const x = ox + num(), y = oy + num()
+        if (!hasSegment) { startDX = x1 - cx; startDY = y1 - cy; hasSegment = true }
+        prevX = x2; prevY = y2; cx = x; cy = y
+      } else if (c === 'Q') {
+        const x1 = ox + num(), y1 = oy + num()
+        const x = ox + num(), y = oy + num()
+        if (!hasSegment) { startDX = x1 - cx; startDY = y1 - cy; hasSegment = true }
+        prevX = x1; prevY = y1; cx = x; cy = y
+      } else if (c === 'Z') {
+        cx = spx; cy = spy; break
+      }
+    } while (i < tokens.length && !isCmd(tokens[i]))
+  }
+
+  if (!hasMove) return null
+
+  // Fallback: if no segments, start/end angles are both 0
+  const startAngle = hasSegment ? Math.atan2(startDY, startDX) : 0
+  const endAngle = hasSegment ? Math.atan2(cy - prevY, cx - prevX) : 0
+
+  return { startX: spx, startY: spy, startAngle, endX: cx, endY: cy, endAngle }
 }
 
 export interface PathProps extends BaseObjectProps {
@@ -135,6 +222,23 @@ export class Path extends BaseObject {
         this._strokePaintCache = { paint: makeStrokePaint(ck, this.stroke, this.opacity), key }
       }
       canvas.drawPath(skPath, this._strokePaintCache!.paint as SkPaint)
+
+      const startArrow = this.stroke.startArrow ?? 'none'
+      const endArrow = this.stroke.endArrow ?? 'none'
+      if ((startArrow !== 'none' || endArrow !== 'none') && (ck as unknown as ArrowCK).Path) {
+        const arrowCK = ck as unknown as ArrowCK
+        const endpoints = parseSvgPathEndpoints(this._d)
+        if (endpoints) {
+          const arrowSize = this.stroke.width * 5
+          if (startArrow !== 'none') {
+            // Start arrow points backward (away from path direction)
+            drawArrowHead(canvas, arrowCK, endpoints.startX, endpoints.startY, endpoints.startAngle + Math.PI, startArrow, arrowSize, this.stroke, this.opacity)
+          }
+          if (endArrow !== 'none') {
+            drawArrowHead(canvas, arrowCK, endpoints.endX, endpoints.endY, endpoints.endAngle, endArrow, arrowSize, this.stroke, this.opacity)
+          }
+        }
+      }
     } else if (this._strokePaintCache) {
       ;(this._strokePaintCache.paint as SkPaint).delete()
       this._strokePaintCache = null
