@@ -204,10 +204,12 @@ export class Path extends BaseObject {
     canvas.concat(this.getLocalTransform().values)
 
     if (this.fill) {
-      const key = fillCacheKey(this.fill, this.opacity)
+      const lb = this.getLocalBoundingBox()
+      const bounds = { x: lb.x, y: lb.y, width: lb.width, height: lb.height }
+      const key = fillCacheKey(this.fill, this.opacity, bounds)
       if (this._fillPaintCache?.key !== key) {
         ;(this._fillPaintCache?.paint as SkPaint | undefined)?.delete()
-        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity), key }
+        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity, bounds), key }
       }
       canvas.drawPath(skPath, this._fillPaintCache!.paint as SkPaint)
     } else if (this._fillPaintCache) {

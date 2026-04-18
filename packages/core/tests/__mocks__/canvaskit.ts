@@ -121,6 +121,7 @@ export function createMockCK() {
     TileMode: { Clamp: 'Clamp' },
     Shader: {
       MakeLinearGradient: () => null,
+      MakeRadialGradient: () => null,
     },
     ClipOp: { Intersect: 'Intersect', Difference: 'Difference' },
     LTRBRect: (l: number, t: number, r: number, b: number) => new Float32Array([l, t, r, b]),

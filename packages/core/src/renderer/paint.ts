@@ -2,7 +2,7 @@
  * Internal paint/color helpers for CanvasKit rendering.
  * Not exported from the public package API.
  */
-import type { Fill, StrokeStyle, ColorRGBA, SolidFill, LinearGradientFill, ArrowHeadStyle } from '../types.js'
+import type { Fill, StrokeStyle, ColorRGBA, SolidFill, LinearGradientFill, RadialGradientFill, ArrowHeadStyle } from '../types.js'
 
 // ---------------------------------------------------------------------------
 // Minimal CanvasKit interfaces needed by this module
@@ -40,6 +40,13 @@ export interface PaintCK {
       positions: number[] | null,
       mode: unknown,
     ): SkShader | null
+    MakeRadialGradient(
+      center: number[],
+      radius: number,
+      colors: Float32Array[],
+      positions: number[] | null,
+      mode: unknown,
+    ): SkShader | null
   }
   TileMode: { Clamp: unknown }
 }
@@ -59,11 +66,20 @@ export function colorToCK(ck: PaintCK, c: ColorRGBA): Float32Array {
 // Fill paint
 // ---------------------------------------------------------------------------
 
+/** Local-space bounding box needed to resolve bounds-relative fill coordinates. */
+export interface FillBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /**
  * Create and configure a CanvasKit Paint for a Fill.
+ * `bounds` is required for radial-gradient fills (center/radius are bounds-relative).
  * Caller is responsible for calling `paint.delete()` when done.
  */
-export function makeFillPaint(ck: PaintCK, fill: Fill, opacity: number): SkPaint {
+export function makeFillPaint(ck: PaintCK, fill: Fill, opacity: number, bounds?: FillBounds): SkPaint {
   const paint = new ck.Paint()
   paint.setStyle(ck.PaintStyle.Fill)
   paint.setAntiAlias(true)
@@ -73,6 +89,8 @@ export function makeFillPaint(ck: PaintCK, fill: Fill, opacity: number): SkPaint
     applySolidFill(ck, paint, fill)
   } else if (fill.type === 'linear-gradient') {
     applyLinearGradient(ck, paint, fill)
+  } else if (fill.type === 'radial-gradient' && bounds) {
+    applyRadialGradient(ck, paint, fill, bounds)
   }
 
   return paint
@@ -88,6 +106,25 @@ function applyLinearGradient(ck: PaintCK, paint: SkPaint, fill: LinearGradientFi
   const shader = ck.Shader.MakeLinearGradient(
     [fill.start.x, fill.start.y],
     [fill.end.x, fill.end.y],
+    colors,
+    positions,
+    ck.TileMode.Clamp,
+  )
+  if (shader) {
+    paint.setShader(shader)
+    shader.delete()
+  }
+}
+
+function applyRadialGradient(ck: PaintCK, paint: SkPaint, fill: RadialGradientFill, bounds: FillBounds): void {
+  const cx = bounds.x + fill.center.x * bounds.width
+  const cy = bounds.y + fill.center.y * bounds.height
+  const radius = fill.radius * Math.max(bounds.width, bounds.height)
+  const colors = fill.stops.map((s) => colorToCK(ck, s.color))
+  const positions = fill.stops.map((s) => s.offset)
+  const shader = ck.Shader.MakeRadialGradient(
+    [cx, cy],
+    radius,
     colors,
     positions,
     ck.TileMode.Clamp,
@@ -140,12 +177,16 @@ export function makeStrokePaint(ck: PaintCK, stroke: StrokeStyle, opacity: numbe
 
 /**
  * Returns a cheap cache key for a fill + opacity combo.
- * Solid fills use a compact format; gradients fall back to JSON (changed rarely).
+ * Solid fills use a compact format; gradients fall back to JSON.
+ * Radial gradient also encodes `bounds` because center/radius are bounds-relative.
  */
-export function fillCacheKey(fill: Fill, opacity: number): string {
+export function fillCacheKey(fill: Fill, opacity: number, bounds?: FillBounds): string {
   if (fill.type === 'solid') {
     const { r, g, b, a } = fill.color
     return `s:${r}:${g}:${b}:${a}:${opacity}`
+  }
+  if (fill.type === 'radial-gradient' && bounds) {
+    return JSON.stringify(fill) + ':' + opacity + ':' + bounds.x + ':' + bounds.y + ':' + bounds.width + ':' + bounds.height
   }
   return JSON.stringify(fill) + ':' + opacity
 }

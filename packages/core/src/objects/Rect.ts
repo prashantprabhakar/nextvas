@@ -50,10 +50,11 @@ export class Rect extends BaseObject {
     const rect = ck.LTRBRect(0, 0, this.width, this.height)
 
     if (this.fill) {
-      const key = fillCacheKey(this.fill, this.opacity)
+      const bounds = { x: 0, y: 0, width: this.width, height: this.height }
+      const key = fillCacheKey(this.fill, this.opacity, bounds)
       if (this._fillPaintCache?.key !== key) {
         ;(this._fillPaintCache?.paint as SkPaint | undefined)?.delete()
-        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity), key }
+        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity, bounds), key }
       }
       const fillPaint = this._fillPaintCache!.paint as SkPaint
       if (this.cornerRadius > 0) {

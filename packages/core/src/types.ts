@@ -36,7 +36,10 @@ export interface CanvasKitLike {
   ColorSpace?: { SRGB: unknown; [k: string]: unknown }
 
   // Factories
-  Shader?: { MakeLinearGradient(start: number[], end: number[], colors: Float32Array[], positions: number[] | null, mode: unknown): unknown }
+  Shader?: {
+    MakeLinearGradient(start: number[], end: number[], colors: Float32Array[], positions: number[] | null, mode: unknown): unknown
+    MakeRadialGradient(center: number[], radius: number, colors: Float32Array[], positions: number[] | null, mode: unknown): unknown
+  }
   PathEffect?: { MakeDash(intervals: number[], phase?: number): unknown; [k: string]: unknown }
 
   // Surface / canvas
@@ -280,7 +283,16 @@ export interface LinearGradientFill {
   end: { x: number; y: number }
 }
 
-export type Fill = SolidFill | LinearGradientFill
+export interface RadialGradientFill {
+  type: 'radial-gradient'
+  stops: Array<{ offset: number; color: ColorRGBA }>
+  /** Center position relative to object bounds, 0–1. Default: { x: 0.5, y: 0.5 } */
+  center: { x: number; y: number }
+  /** Radius relative to the longer object dimension, 0–1. Default: 0.5 */
+  radius: number
+}
+
+export type Fill = SolidFill | LinearGradientFill | RadialGradientFill
 
 export type StrokeLineCap = 'butt' | 'round' | 'square'
 export type StrokeLineJoin = 'miter' | 'round' | 'bevel'

@@ -89,10 +89,11 @@ export class Circle extends BaseObject {
     const oval = ck.LTRBRect(0, 0, this.width, this.height)
 
     if (this.fill) {
-      const key = fillCacheKey(this.fill, this.opacity)
+      const bounds = { x: 0, y: 0, width: this.width, height: this.height }
+      const key = fillCacheKey(this.fill, this.opacity, bounds)
       if (this._fillPaintCache?.key !== key) {
         ;(this._fillPaintCache?.paint as SkPaint | undefined)?.delete()
-        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity), key }
+        this._fillPaintCache = { paint: makeFillPaint(ck, this.fill, this.opacity, bounds), key }
       }
       canvas.drawOval(oval, this._fillPaintCache!.paint as SkPaint)
     } else if (this._fillPaintCache) {
