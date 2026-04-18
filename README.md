@@ -26,8 +26,13 @@ Konva and Fabric.js are built on the browser's Canvas 2D API — a CPU-bound, si
 
 - **Scene graph** — Stage → Layers → Objects, with full z-order control
 - **7 built-in object types** — Rect, Circle, Line, Path, Text, Image, Group
+- **Spatial index** — R-tree hit testing; O(log n) even with thousands of objects
 - **Viewport** — pan, zoom, fit-to-content, animated transitions
-- **Event system** — hit-tested pointer events with screen + world coordinates, tap/doubletap touch support
+- **Event system** — hit-tested pointer events with screen + world coordinates, tap/doubletap touch support, working `stopPropagation()`
+- **Object mutation events** — `object:mutated` fires whenever position/size/rotation changes
+- **Custom object types** — `stage.registerObject()` lets custom types survive `loadJSON()` round-trips
+- **Scene query API** — `stage.find(predicate)`, `stage.findByType(type)` across all layers
+- **Per-object hit tolerance** — set `hitTolerance` on thin objects like connectors for easier clicking
 - **Plugin-first** — core stays lean; everything optional is a plugin
 - **Serialization** — versioned JSON scene format with migration support
 - **TypeScript** — strict types throughout, zero `any` in public APIs
@@ -61,6 +66,9 @@ import { Stage, Rect, Circle } from '@nexvas/core'
 
 const ck = await loadCanvasKit()
 const stage = new Stage({ canvas: document.getElementById('canvas'), canvasKit: ck })
+
+// Wait for fonts before starting the loop — avoids label-less first frames
+await stage.fonts.waitForReady()
 
 const layer = stage.addLayer()
 
