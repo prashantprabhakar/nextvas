@@ -127,15 +127,16 @@ export class AlignController {
   distributeHorizontally(objects: BaseObject[]): void {
     if (objects.length < 3) return
     const sorted = [...objects].sort((a, b) => a.getWorldBoundingBox().x - b.getWorldBoundingBox().x)
-    const first = sorted[0].getWorldBoundingBox()
-    const last = sorted[sorted.length - 1].getWorldBoundingBox()
+    // ! is safe: early return above guarantees sorted.length >= 3
+    const first = sorted[0]!.getWorldBoundingBox()
+    const last = sorted[sorted.length - 1]!.getWorldBoundingBox()
     const totalWidth = sorted.reduce((sum, o) => sum + o.getWorldBoundingBox().width, 0)
     const gap = (last.x + last.width - first.x - totalWidth) / (sorted.length - 1)
     this._stage.batch(() => {
       let cursor = first.x + first.width + gap
       for (let i = 1; i < sorted.length - 1; i++) {
-        const bb = sorted[i].getWorldBoundingBox()
-        sorted[i].x += cursor - bb.x
+        const bb = sorted[i]!.getWorldBoundingBox()
+        sorted[i]!.x += cursor - bb.x
         cursor += bb.width + gap
       }
     })
@@ -149,15 +150,16 @@ export class AlignController {
   distributeVertically(objects: BaseObject[]): void {
     if (objects.length < 3) return
     const sorted = [...objects].sort((a, b) => a.getWorldBoundingBox().y - b.getWorldBoundingBox().y)
-    const first = sorted[0].getWorldBoundingBox()
-    const last = sorted[sorted.length - 1].getWorldBoundingBox()
+    // ! is safe: early return above guarantees sorted.length >= 3
+    const first = sorted[0]!.getWorldBoundingBox()
+    const last = sorted[sorted.length - 1]!.getWorldBoundingBox()
     const totalHeight = sorted.reduce((sum, o) => sum + o.getWorldBoundingBox().height, 0)
     const gap = (last.y + last.height - first.y - totalHeight) / (sorted.length - 1)
     this._stage.batch(() => {
       let cursor = first.y + first.height + gap
       for (let i = 1; i < sorted.length - 1; i++) {
-        const bb = sorted[i].getWorldBoundingBox()
-        sorted[i].y += cursor - bb.y
+        const bb = sorted[i]!.getWorldBoundingBox()
+        sorted[i]!.y += cursor - bb.y
         cursor += bb.height + gap
       }
     })
@@ -177,7 +179,8 @@ export class AlignController {
     }
 
     if (relativeTo === 'first') {
-      const bb = objects[0].getWorldBoundingBox()
+      // ! is safe: callers must pass a non-empty objects array (enforced by all public align methods)
+      const bb = objects[0]!.getWorldBoundingBox()
       return { x: bb.x, y: bb.y, width: bb.width, height: bb.height }
     }
 
