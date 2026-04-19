@@ -233,6 +233,12 @@ export interface StageEventMap extends ObjectEventMap {
   'animate:complete': { animation: unknown }
   /** Fired by AnimatePlugin when a tween, sequence, or parallel animation is cancelled. */
   'animate:cancel': { animation: unknown }
+  /**
+   * Fired by RulerPlugin immediately after install.
+   * `size` is the ruler band thickness in CSS pixels — the app should inset
+   * the canvas element by this amount on the top and left edges.
+   */
+  'ruler:ready': { size: number }
 }
 
 // ---------------------------------------------------------------------------
