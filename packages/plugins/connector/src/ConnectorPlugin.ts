@@ -237,8 +237,8 @@ export class ConnectorPlugin implements Plugin {
       source: props.source,
       target: props.target,
       routing: props.routing ?? this._options.defaultRouting,
-      label: props.label,
-      labelOffset: props.labelOffset,
+      ...(props.label !== undefined && { label: props.label }),
+      ...(props.labelOffset !== undefined && { labelOffset: props.labelOffset }),
       stroke: this._options.defaultStroke,
     })
     const layer = this._stage.layers[0]
