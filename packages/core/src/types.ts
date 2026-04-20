@@ -245,6 +245,12 @@ export interface StageEventMap extends ObjectEventMap {
    * the canvas element by this amount on the top and left edges.
    */
   'ruler:ready': { size: number }
+  /** Fired by TextEditPlugin when inline editing begins on an object. */
+  'textedit:start': { object: BaseObject }
+  /** Fired by TextEditPlugin when the user commits an edit (Enter or blur). */
+  'textedit:commit': { object: BaseObject; oldText: string; newText: string }
+  /** Fired by TextEditPlugin when the user cancels an edit (Escape). */
+  'textedit:cancel': { object: BaseObject }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +376,8 @@ export interface StrokeStyle {
 export interface StageInterface {
   readonly id: string
   readonly canvasKit: CanvasKitLike
+  /** The HTML canvas element owned by this stage. */
+  readonly canvas: HTMLCanvasElement
   readonly layers: readonly Layer[]
   readonly viewport: Viewport
   readonly fonts: FontManager
